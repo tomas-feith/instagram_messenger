@@ -1,6 +1,6 @@
 [versions]
 agp = "9.3.1"
-kotlin = "2.4.10"
+kotlin = "2.4.20"
 ktlint = "14.2.0"
 ktlintTool = "1.8.0"
 # detekt 2 is still in alpha; it is taken deliberately for the K2 frontend, which is what
@@ -12,11 +12,11 @@ activityCompose = "1.13.0"
 composeBom = "2026.08.00"
 # Aligned with the version androidx already resolves on the classpath, rather than pushed
 # ahead of it. Dependabot raises both together.
-coroutines = "1.9.0"
+coroutines = "1.11.0"
 # 2.12.0 is still rc, so the metadata <latest> tag is not a stable version.
 work = "2.11.2"
 okhttp = "4.12.0"
-kotlinxSerialization = "1.9.0"
+kotlinxSerialization = "1.11.0"
 junit = "4.13.2"
 
 [libraries]
