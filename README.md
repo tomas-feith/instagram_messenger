@@ -21,10 +21,15 @@ own web client in a WebView and fences it in. Two layers, deliberately unequal:
 
 A post or reel a friend sends you opens on its own, with a "Back to chat" bar. It is
 reachable only from a chat, never from another post, so "more posts from this account"
-under it goes nowhere. The reels viewer is rewritten to the single-reel page, and that
-page is scroll-locked while a reel is open: it loads suggested reels underneath without
-a navigation the policy could refuse, so vertical swipes are swallowed instead. Taps,
-the progress bar and the comments sheet still work.
+under it goes nowhere.
+
+Reels need more than that, because a reel tapped in a chat does not navigate: it opens a
+viewer over the chat, and that viewer is a vertical scroll container preloaded with a
+dozen suggested reels. The script recognises it by its structure (videos in a vertical
+scroll-snap container), freezes it, and hides every reel in it except the one you
+opened, so there is nothing to scroll or flick to. A reel opened as its own page (from a
+link) gets the same treatment by path. Taps, the progress bar and the comments sheet
+still work.
 
 Links to anything outside Instagram open in your browser. `intent:` links - how the site
 tries to hand you over to the real Instagram app - are dropped.

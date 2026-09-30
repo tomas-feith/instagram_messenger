@@ -145,6 +145,109 @@
     }
   }
 
+  /*
+   * Reel viewer lock. Tapping a reel in a chat does not navigate at all: it opens a viewer
+   * over the chat, the URL stays /direct/t/<id>/, and the viewer is a vertical scroll-snap
+   * container already holding the shared reel plus a dozen suggested ones, one screen
+   * apart. Seen on a real phone on 2026-09-30 - fifteen videos stacked 629px apart - after
+   * the path-based lock above did nothing, because the path never became a reel.
+   *
+   * So the viewer is recognised by structure instead: a video inside a scroll-snap item
+   * inside a vertical scroll-snap container. The container is frozen, and every branch of
+   * it except the one holding the reel that was on screen when it opened is hidden -
+   * including branches the site appends later. With nothing else on the page, a hard
+   * flick that the site's own code turns into a programmatic scroll has nowhere to go.
+   */
+  var VIEWER_ATTR = 'data-instachat-viewer';
+  var KEEP_ATTR = 'data-instachat-keep';
+
+  function snapItemOf(node) {
+    for (var n = node; n && n !== document.documentElement; n = n.parentElement) {
+      if (getComputedStyle(n).scrollSnapAlign !== 'none') return n;
+    }
+    return null;
+  }
+
+  function verticalSnapAncestor(node) {
+    for (var n = node.parentElement; n && n !== document.documentElement; n = n.parentElement) {
+      if (/(^|\s)(y|block|both)(\s|$)/.test(getComputedStyle(n).scrollSnapType)) return n;
+    }
+    return null;
+  }
+
+  function lockReelViewers() {
+    var videos = document.getElementsByTagName('video');
+    for (var i = 0; i < videos.length; i++) {
+      if (videos[i].closest('[' + VIEWER_ATTR + ']')) continue;
+      var item = snapItemOf(videos[i]);
+      var viewer = item && verticalSnapAncestor(item);
+      if (!viewer) continue;
+      viewer.setAttribute(VIEWER_ATTR, '');
+      viewer.style.setProperty('overflow', 'hidden', 'important');
+      viewer.style.setProperty('overscroll-behavior', 'none', 'important');
+    }
+
+    var viewers = document.querySelectorAll('[' + VIEWER_ATTR + ']');
+    for (var j = 0; j < viewers.length; j++) {
+      var box = viewers[j];
+      var keep = box.querySelector('[' + KEEP_ATTR + ']');
+      if (!keep) {
+        // The reel on screen when the viewer opened: the snap item nearest its top.
+        var top = box.getBoundingClientRect().top;
+        var best = Infinity;
+        var inBox = box.getElementsByTagName('video');
+        for (var k = 0; k < inBox.length; k++) {
+          var candidate = snapItemOf(inBox[k]);
+          if (!candidate) continue;
+          var distance = Math.abs(candidate.getBoundingClientRect().top - top);
+          if (distance < best) {
+            best = distance;
+            keep = candidate;
+          }
+        }
+        if (!keep) continue;
+        keep.setAttribute(KEEP_ATTR, '');
+      }
+
+      // Climb from the kept reel to the level where the other reels branch off, then hide
+      // every sibling at that level. Siblings rather than other videos, so a suggestion
+      // still showing a thumbnail - no video element yet - is hidden too.
+      var other = null;
+      var all = box.getElementsByTagName('video');
+      for (var m = 0; m < all.length; m++) {
+        if (!keep.contains(all[m])) {
+          other = all[m];
+          break;
+        }
+      }
+      if (!other) continue;
+      var branch = keep;
+      while (branch.parentElement !== box && !branch.parentElement.contains(other)) {
+        branch = branch.parentElement;
+      }
+      var hidAbove = false;
+      var siblings = branch.parentElement.children;
+      for (var s = 0; s < siblings.length; s++) {
+        var sib = siblings[s];
+        if (sib === branch || sib.hasAttribute('data-instachat-hidden')) continue;
+        if (sib.compareDocumentPosition(branch) & Node.DOCUMENT_POSITION_FOLLOWING) {
+          hidAbove = true;
+        }
+        hide(sib);
+      }
+      // Hiding reels above the kept one moves it to the top; follow it there.
+      if (hidAbove) box.scrollTop = 0;
+    }
+  }
+
+  function inViewer(target) {
+    return !!(target && target.closest && target.closest('[' + VIEWER_ATTR + ']'));
+  }
+
+  function swipeLocked(target) {
+    return (onReel() || inViewer(target)) && !inDialog(target);
+  }
+
   var touchX = 0;
   var touchY = 0;
   window.addEventListener('touchstart', function (e) {
@@ -159,7 +262,7 @@
   }
 
   window.addEventListener('touchmove', function (e) {
-    if (!onReel() || !e.touches.length || inDialog(e.target)) return;
+    if (!swipeLocked(e.target) || !e.touches.length) return;
     if (isVerticalSwipe(e.touches[0].clientX, e.touches[0].clientY)) {
       e.preventDefault();
       e.stopPropagation();
@@ -168,12 +271,12 @@
 
   // Some swipe code listens to pointer events rather than touch events.
   window.addEventListener('pointermove', function (e) {
-    if (!onReel() || e.pointerType !== 'touch' || inDialog(e.target)) return;
+    if (!swipeLocked(e.target) || e.pointerType !== 'touch') return;
     if (isVerticalSwipe(e.clientX, e.clientY)) e.stopPropagation();
   }, { capture: true });
 
   window.addEventListener('wheel', function (e) {
-    if (!onReel() || inDialog(e.target)) return;
+    if (!swipeLocked(e.target)) return;
     e.preventDefault();
     e.stopPropagation();
   }, { capture: true, passive: false });
@@ -189,6 +292,7 @@
       queued = false;
       sweep();
       updateReelLock();
+      lockReelViewers();
     });
   }
 
@@ -196,6 +300,7 @@
 
   sweep();
   updateReelLock();
+  lockReelViewers();
   new MutationObserver(schedule).observe(document.documentElement, {
     childList: true,
     subtree: true,

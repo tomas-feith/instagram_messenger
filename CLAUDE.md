@@ -32,6 +32,14 @@ account; the WebView is Instagram's own web client and looks like a browser to i
   the policy sees, so on a reel path the script freezes scrolling and swallows vertical
   swipes. It restores the site's own inline styles on the way out; deleting them instead
   once left a scroller dead after returning to chat. Reported by the user on 0.2.
+- **The reel viewer never changes the URL.** Tapping a reel in a chat opens a viewer over
+  `/direct/t/<id>/` - a vertical scroll-snap container with the shared reel and ~14
+  suggested ones stacked below (inspected on the phone, 0.3). No path check can see it,
+  and a hard flick is turned into a programmatic scroll by the site, which overflow and
+  swipe blocking do not stop. `lockReelViewers()` finds it by structure (video in a
+  snap-aligned item in a vertical snap container), freezes it, and hides every branch
+  but the reel that was on screen when it opened. To inspect a release install, flip
+  the `FLAG_DEBUGGABLE` check in `createWebView` locally and never commit it.
 - `notify/Inbox.kt` - parses the undocumented `/api/v1/direct_v2/inbox/` response.
   Defensive by design: a malformed thread is skipped, not fatal; ids and timestamps are
   accepted as numbers or strings. Timestamps are **microseconds**.
