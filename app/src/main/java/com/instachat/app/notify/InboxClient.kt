@@ -104,7 +104,7 @@ class InboxClient(
             try {
                 http.newCall(request).execute().use { response ->
                     val code = response.code
-                    val body = { parseInbox(response.body?.string().orEmpty(), session.viewerId) }
+                    val body = { parseInbox(response.body.string(), session.viewerId) }
                     when {
                         code in HTTP_OK_RANGE -> {
                             FetchResult.Done(body())
