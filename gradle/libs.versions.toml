@@ -6,15 +6,15 @@ ktlintTool = "1.8.0"
 # detekt 2 is still in alpha; it is taken deliberately for the K2 frontend, which is what
 # makes type resolution possible on Kotlin 2.4 sources. Same choice as habit_tracker.
 detekt = "2.0.0-alpha.6"
-coreKtx = "1.19.0"
+coreKtx = "1.19.1"
 lifecycle = "2.11.0"
 activityCompose = "1.13.0"
-composeBom = "2026.08.00"
+composeBom = "2026.09.00"
 # Aligned with the version androidx already resolves on the classpath, rather than pushed
 # ahead of it. Dependabot raises both together.
 coroutines = "1.9.0"
 # 2.12.0 is still rc, so the metadata <latest> tag is not a stable version.
-work = "2.11.2"
+work = "2.12.0"
 okhttp = "4.12.0"
 kotlinxSerialization = "1.9.0"
 junit = "4.13.2"
