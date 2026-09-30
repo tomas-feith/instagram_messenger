@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Kept in step with the backgrounds in ui/theme/Theme.kt. -->
+    <color name="launch_background">#FFFFFF</color>
+    <color name="ic_launcher_background">#D62976</color>
+</resources>

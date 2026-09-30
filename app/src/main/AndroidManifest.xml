@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!--
+        Voice messages and video. Asked for only when the page asks for the microphone or
+        camera, never up front, and handed to the page only for Instagram's own origin.
+    -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+
+    <!--
+        No Auto Backup. The only data is the WebView session, and restoring that onto a
+        new phone would be restoring a login - better entered again than copied.
+    -->
+    <application
+        android:name=".InstaChatApplication"
+        android:allowBackup="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
+        android:fullBackupContent="@xml/backup_rules"
+        android:icon="@mipmap/ic_launcher"
+        android:label="@string/app_name"
+        android:roundIcon="@mipmap/ic_launcher_round"
+        android:supportsRtl="true"
+        android:theme="@style/Theme.InstaChat">
+
+        <!--
+            singleTop so a tapped notification reaches the running activity through
+            onNewIntent, rather than stacking a second WebView with a second copy of the
+            site on top of the first.
+
+            The configChanges keep a rotation or a keyboard from recreating the activity,
+            which would reload the page and drop a half-typed message. uiMode is left out
+            on purpose: a dark-mode switch should recreate, so the page re-renders in the
+            new scheme.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density"
+            android:exported="true"
+            android:launchMode="singleTop">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+    </application>
+
+</manifest>

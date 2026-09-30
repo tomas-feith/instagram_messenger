@@ -1,0 +1,32 @@
+#!/bin/sh
+#
+# Runs the fast half of CI before a commit lands: formatting and static analysis.
+# Unit tests and Lint are left to CI because they are too slow to sit in front of
+# every commit.
+#
+# Enable with:  git config core.hooksPath .githooks
+# Skip once with:  git commit --no-verify
+
+set -e
+
+# Nothing Kotlin changed, so nothing here can fail.
+if ! git diff --cached --name-only --diff-filter=ACM | grep -qE '\.(kt|kts)$'; then
+    exit 0
+fi
+
+echo "pre-commit: ktlint + detekt"
+
+if [ -n "$JAVA_HOME" ] && [ -x "$JAVA_HOME/bin/java" ]; then
+    :
+elif [ -x "$HOME/tools/jdk-17.0.13+11/bin/java" ]; then
+    JAVA_HOME="$HOME/tools/jdk-17.0.13+11"
+    export JAVA_HOME
+fi
+
+# detektMain rather than the bare `detekt` task, which resolves no types in detekt 2 and
+# finds nothing. detektTest is left to CI: type resolution costs a minute or two on a cold
+# run, and production code is where it earns that back. If the wait gets in the way,
+# `git commit --no-verify` skips it and CI still runs both.
+./gradlew --quiet ktlintCheck detektMain
+
+echo "pre-commit: ok"

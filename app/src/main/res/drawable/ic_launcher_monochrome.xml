@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Themed-icon variant. The launcher tints it from the alpha channel alone, so the dots are
+    cut out with evenOdd fill rather than painted in a colour that would be lost.
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <path
+        android:fillType="evenOdd"
+        android:pathData="M54,28 C71,28 84,39.5 84,53.5 C84,67.5 71,79 54,79 C50.5,79 47.2,78.5 44.2,77.6 L32,83 L34.5,72.5 C28,67.9 24,61.1 24,53.5 C24,39.5 37,28 54,28 Z M38,53.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 M50,53.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 M62,53.5 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0"
+        android:fillColor="#FFFFFF" />
+</vector>

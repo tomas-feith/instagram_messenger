@@ -1,0 +1,68 @@
+# Project overrides on top of detekt's defaults (buildUponDefaultConfig = true).
+# Only deviations are listed; everything else keeps detekt's shipped setting. Mirrors
+# habit_tracker's, minus the exceptions that existed for its Room DAO and repository.
+
+complexity:
+  LongParameterList:
+    # Compose composables legitimately take many parameters, most with defaults.
+    ignoreDefaultParameters: true
+    allowedFunctionParameters: 8
+    allowedConstructorParameters: 8
+  TooManyFunctions:
+    # MainActivity overrides one lifecycle callback per event it cares about, and the
+    # WebView's permission and file-chooser bridges have to live beside the launchers
+    # they use. That is a count of framework hooks, not of tangled logic.
+    allowedFunctionsPerClass: 20
+    ignorePrivate: true
+    ignoreOverridden: true
+  LongMethod:
+    # Compose screen functions are declarative trees, not dense logic.
+    allowedLines: 120
+  CyclomaticComplexMethod:
+    allowedComplexity: 18
+
+style:
+  MagicNumber:
+    ignoreNumbers: ['-1', '0', '1', '2']
+    ignorePropertyDeclaration: true
+    ignoreCompanionObjectPropertyDeclaration: true
+    ignoreAnnotation: true
+    ignoreNamedArgument: true
+    # Layout code is full of one-off sizes, and test fixtures are full of timestamps.
+    # Naming those hurts readability rather than helping it.
+    excludes: ['**/ui/**', '**/test/**', '**/androidTest/**']
+  MaxLineLength:
+    maxLineLength: 100
+    excludes: ['**/test/**']
+  ReturnCount:
+    max: 4
+  # UnusedPrivateMember was split in two in detekt 2.
+  UnusedPrivateFunction:
+    active: true
+  UnusedPrivateProperty:
+    active: true
+  ForbiddenComment:
+    # Flag leftover markers so they don't quietly ship.
+    comments:
+      - reason: 'Unresolved work should be tracked, not buried in a comment.'
+        value: 'TODO:'
+      - reason: 'Unresolved work should be tracked, not buried in a comment.'
+        value: 'FIXME:'
+
+naming:
+  FunctionNaming:
+    # Composables are PascalCase by convention.
+    ignoreAnnotated: ['Composable']
+
+exceptions:
+  TooGenericExceptionCaught:
+    active: true
+  SwallowedException:
+    active: true
+
+coroutines:
+  # Off for the same reason as in habit_tracker: the sites it flags are Android entry
+  # points (the worker's main-thread cookie read) with no DI container to inject through.
+  # InboxClient, which does have tests, takes its dispatcher as a parameter anyway.
+  InjectDispatcher:
+    active: false

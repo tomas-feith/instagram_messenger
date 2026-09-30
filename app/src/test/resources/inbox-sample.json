@@ -1,0 +1,69 @@
+{
+  "viewer": {"pk": 1000, "username": "me"},
+  "inbox": {
+    "threads": [
+      {
+        "thread_id": "340282366841710300949128000000000001",
+        "thread_v2_id": "t-unread",
+        "thread_title": "alice",
+        "is_group": false,
+        "muted": false,
+        "users": [{"pk": "2000", "username": "alice", "full_name": "Alice A"}],
+        "items": [
+          {"item_id": "i1", "user_id": 2000, "timestamp": "1727700000000200", "item_type": "text", "text": "are you coming?"}
+        ],
+        "last_seen_at": {"1000": {"timestamp": "1727700000000100", "item_id": "i0"}}
+      },
+      {
+        "thread_id": "t-read",
+        "thread_title": "bob",
+        "users": [{"pk": 3000, "username": "bob", "full_name": ""}],
+        "items": [
+          {"item_id": "i2", "user_id": 3000, "timestamp": 1727700000000300, "item_type": "clip"}
+        ],
+        "last_seen_at": {"1000": {"timestamp": "1727700000000300"}}
+      },
+      {
+        "thread_id": "t-mine",
+        "thread_title": "carol",
+        "users": [{"pk": 4000, "username": "carol"}],
+        "items": [
+          {"item_id": "i3", "user_id": 1000, "timestamp": "1727700000000400", "item_type": "text", "text": "see you"}
+        ],
+        "last_seen_at": {}
+      },
+      {
+        "thread_id": "t-group",
+        "thread_title": "",
+        "is_group": true,
+        "users": [
+          {"pk": 5000, "username": "dave", "full_name": "Dave D"},
+          {"pk": 6000, "username": "erin", "full_name": "Erin E"}
+        ],
+        "items": [
+          {"item_id": "i4", "user_id": "6000", "timestamp": "1727700000000500", "item_type": "media_share"}
+        ]
+      },
+      {
+        "thread_id": "t-muted",
+        "thread_title": "noisy",
+        "muted": true,
+        "users": [{"pk": 7000, "username": "noisy"}],
+        "items": [
+          {"item_id": "i5", "user_id": 7000, "timestamp": "1727700000000600", "item_type": "text", "text": "spam"}
+        ]
+      },
+      {
+        "thread_title": "no id, skipped"
+      },
+      {
+        "thread_id": "t-empty",
+        "thread_title": "nothing yet",
+        "users": [],
+        "items": []
+      }
+    ],
+    "unseen_count": 2
+  },
+  "status": "ok"
+}

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Only the launch theme lives here; everything after the first frame is Compose and
+        the page. It matters more than usual: the WebView tells the site whether to render
+        light or dark from this theme's isLightTheme, so values-night must override it.
+    -->
+    <style name="Theme.InstaChat" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/launch_background</item>
+    </style>
+</resources>

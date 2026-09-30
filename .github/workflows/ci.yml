@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  # A newer push to the same branch makes the in-flight run pointless.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GRADLE_OPTS: -Dorg.gradle.daemon=false
+
+jobs:
+  verify:
+    name: Build, test and analyse
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          # Only write to the shared cache from main, so a PR cannot poison it.
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+
+      - name: Check formatting
+        run: ./gradlew ktlintCheck --no-daemon
+
+      # detektMain and detektTest, not the bare `detekt` task: those are the ones detekt 2
+      # wires type resolution into. The plain task is the retiring 1.x-shaped one and
+      # reports nothing on this project.
+      - name: Static analysis
+        run: ./gradlew detektMain detektTest --no-daemon
+
+      # No instrumentation job, unlike habit_tracker: that one exists to replay Room
+      # migrations, and this app has no database. Everything with logic in it - the URL
+      # policy, the inbox parser, the HTTP client - is plain JVM code tested below.
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon
+
+      - name: Android Lint
+        run: ./gradlew lintDebug --no-daemon
+
+      - name: Assemble debug APK
+        run: ./gradlew assembleDebug --no-daemon
+
+      # Reports are far more useful than the console log when something fails.
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: reports
+          path: |
+            app/build/reports/
+            app/build/test-results/
+          retention-days: 14
+          if-no-files-found: ignore
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v7
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14

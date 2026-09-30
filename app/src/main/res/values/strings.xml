@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        app_name is not here: it is declared per build type in app/build.gradle.kts, so the
+        debug build is labelled "Insta Chat (debug)" on the launcher.
+    -->
+</resources>

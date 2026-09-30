@@ -1,0 +1,34 @@
+*.iml
+.gradle/
+.kotlin/
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+
+# Machine-specific: holds the absolute SDK path. Use ANDROID_HOME instead.
+local.properties
+
+# Signing and secrets. Nothing here is ever safe to publish, and this repo is
+# public - no negated exceptions, so a stray keystore cannot be re-included.
+*.keystore
+*.jks
+keystore.properties
+signing.properties
+secrets.properties
+*.p12
+*.pem
+.env
+.env.*
+
+.idea/
+!.idea/codeStyles/
+
+.DS_Store
+Thumbs.db
+
+# Crash debris from MSYS/Cygwin tooling on Windows.
+*.stackdump
+core

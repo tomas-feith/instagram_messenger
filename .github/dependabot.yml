@@ -1,0 +1,21 @@
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 5
+    groups:
+      # AndroidX moves in lockstep often enough that one PR beats fifteen.
+      androidx:
+        patterns:
+          - 'androidx.*'
+      kotlin:
+        patterns:
+          - 'org.jetbrains.kotlin*'
+          - 'com.google.devtools.ksp*'
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
