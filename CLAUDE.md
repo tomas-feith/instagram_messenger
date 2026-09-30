@@ -48,6 +48,10 @@ account; the WebView is Instagram's own web client and looks like a browser to i
   would bounce forever. See `MainActivity.handleBack`.
 - `FileChooserParams.createIntent()` is not used: it breaks on the site's multi-type
   accept list and ignores multi-select.
+- The WebView must have MATCH_PARENT layout params. AndroidView's default is
+  WRAP_CONTENT, which makes the page's root 0px tall; instagram.com lays everything out
+  from `height: 100%`, so 0.1 rendered a blank background on every page. The emulator
+  showed the same symptom and it was first misread as an outdated WebView - it was not.
 - The debug build is a separate app id with its own WebView profile - a second login.
 - Verifying real behaviour needs a logged-in account on a device; unit tests cover the
   policy, the parser and the HTTP client, not the site. `chrome://inspect` works on

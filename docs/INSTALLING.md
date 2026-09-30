@@ -94,16 +94,14 @@ apksigner verify --print-certs app\build\outputs\apk\release\app-release.apk
 
 ## A blank dark screen
 
-The page is drawn by the phone's **Android System WebView**, which updates through the Play
-Store separately from the app. Instagram's site uses current CSS, and an out-of-date WebView
-lays it out as nothing: the background colour and no content. This was seen on 2026-09-30
-with the stock emulator image's WebView 124, while desktop Chrome 154 rendered the same page
-correctly. Update "Android System WebView" (and Chrome) in the Play Store.
+Fixed in 0.2. Version 0.1 showed Instagram's background colour and nothing else, on every
+page: Compose gave the WebView WRAP_CONTENT layout params, which size the page to its
+content, so the root element was 0px tall and instagram.com's `height: 100%` layout
+collapsed. `MainActivity.createWebView` now sets MATCH_PARENT. If a blank page ever comes
+back, attach `chrome://inspect` to a debug build and check whether `<html>` has a height.
 
-For an emulator, use a Google Play system image so the WebView can be updated.
-
-The first page also shows Instagram's cookie-consent dialog in the EU. Its policy links open
-in the browser, by design.
+The first page shows Instagram's cookie-consent dialog in the EU. Its policy links open in
+the browser, by design.
 
 ## When notifications stop
 

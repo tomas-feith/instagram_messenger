@@ -8,6 +8,7 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.PermissionRequest
 import android.webkit.ValueCallback
@@ -129,6 +130,16 @@ class MainActivity : ComponentActivity() {
             )
 
         return WebView(this).apply {
+            // MATCH_PARENT, not the WRAP_CONTENT that AndroidView assigns a view that has no
+            // layout params. A WebView measured as wrap-content sizes the page to its content
+            // instead of to the screen, so the root element is 0px tall - and instagram.com
+            // hangs its whole layout off height: 100%, so every page rendered as a blank
+            // background. Seen on a real phone with a current WebView, not an emulator quirk.
+            layoutParams =
+                ViewGroup.LayoutParams(
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                    ViewGroup.LayoutParams.MATCH_PARENT,
+                )
             settings.apply {
                 javaScriptEnabled = true
                 domStorageEnabled = true
