@@ -21,8 +21,10 @@ own web client in a WebView and fences it in. Two layers, deliberately unequal:
 
 A post or reel a friend sends you opens on its own, with a "Back to chat" bar. It is
 reachable only from a chat, never from another post, so "more posts from this account"
-under it goes nowhere. The reels viewer is rewritten to the single-reel page, so a
-shared reel cannot be swiped on into the reels feed.
+under it goes nowhere. The reels viewer is rewritten to the single-reel page, and that
+page is scroll-locked while a reel is open: it loads suggested reels underneath without
+a navigation the policy could refuse, so vertical swipes are swallowed instead. Taps,
+the progress bar and the comments sheet still work.
 
 Links to anything outside Instagram open in your browser. `intent:` links - how the site
 tries to hand you over to the real Instagram app - are dropped.

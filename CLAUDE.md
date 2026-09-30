@@ -27,7 +27,11 @@ account; the WebView is Instagram's own web client and looks like a browser to i
   changes are only reported through `doUpdateVisitedHistory` *after*, so those are backed
   out rather than refused. Forgetting the second path is how the feed would leak back in.
 - `assets/hide_chrome.js` - cosmetic hiding of the nav bar, keyed on link targets, never
-  on class names (they are generated). Not a security boundary.
+  on class names (they are generated). Not a security boundary. Also the **reel lock**:
+  the single-reel page loads suggested reels below and swiping to them changes no URL
+  the policy sees, so on a reel path the script freezes scrolling and swallows vertical
+  swipes. It restores the site's own inline styles on the way out; deleting them instead
+  once left a scroller dead after returning to chat. Reported by the user on 0.2.
 - `notify/Inbox.kt` - parses the undocumented `/api/v1/direct_v2/inbox/` response.
   Defensive by design: a malformed thread is skipped, not fatal; ids and timestamps are
   accepted as numbers or strings. Timestamps are **microseconds**.
