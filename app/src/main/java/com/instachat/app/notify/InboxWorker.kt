@@ -41,7 +41,11 @@ class InboxWorker(
 
         // Not logged in yet (or logged out in the app): nothing to check, and nothing to
         // say - the user can see the login page.
-        val session = Session.fromCookieHeader(cookies) ?: return Result.success()
+        val session = Session.fromCookieHeader(cookies)
+        if (session == null) {
+            Log.i(TAG, "No session cookie, skipping (cookies present: ${cookies != null})")
+            return Result.success()
+        }
         val state = NotifierState(applicationContext)
 
         return when (val fetched = InboxClient().fetch(session, userAgent)) {
@@ -80,16 +84,46 @@ class InboxWorker(
             is InboxResult.Parsed -> {
                 state.loggedOutNotified = false
                 val watermark = state.watermarkMicros
+                val unread = if (watermark == null) emptyList() else unreadSince(inbox, watermark)
+                val foreground = AppVisibility.inForeground
                 // The first check after install or login only seeds the watermark. The user
                 // has just been looking at the inbox; announcing every chat they left unread
                 // over the past months would be the opposite of useful.
-                if (watermark != null && !AppVisibility.inForeground) {
-                    notifyThreads(applicationContext, unreadSince(inbox, watermark))
-                }
-                state.watermarkMicros = nextWatermark(inbox, watermark ?: 0L)
+                if (!foreground) notifyThreads(applicationContext, unread)
+                val next = nextWatermark(inbox, watermark ?: 0L)
+                state.watermarkMicros = next
+                // Counts and timestamps only, never names or text: enough to tell from
+                // `adb logcat -s InboxWorker` which step dropped a message.
+                Log.i(
+                    TAG,
+                    "Checked: threads=${inbox.threads.size} unread=${unread.size} " +
+                        "foreground=$foreground watermark=$watermark->$next " +
+                        "newSinceWatermark=[${describeNew(inbox, watermark)}]",
+                )
             }
         }
     }
+
+    /**
+     * For each thread with a message newer than [watermark], the one fact that decides
+     * whether it is notified: sent by the viewer, already read, muted, or unread.
+     */
+    private fun describeNew(
+        inbox: InboxResult.Parsed,
+        watermark: Long?,
+    ): String =
+        inbox.threads
+            .filter { watermark != null && (it.last?.timestampMicros ?: 0L) > watermark }
+            .joinToString(",") { thread ->
+                val last = thread.last ?: return@joinToString "?"
+                val seen = thread.viewerSeenMicros
+                when {
+                    last.senderId == inbox.viewerId -> "own"
+                    seen != null && last.timestampMicros <= seen -> "read"
+                    thread.muted -> "muted"
+                    else -> "unread"
+                }
+            }
 
     companion object {
         private const val TAG = "InboxWorker"

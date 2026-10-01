@@ -30,8 +30,8 @@ android {
         targetSdk = 37
         // Bump on anything that gets installed on a real phone. The app is sideloaded, so
         // the version is the only thing that says which build is installed.
-        versionCode = 4
-        versionName = "0.4"
+        versionCode = 5
+        versionName = "0.5"
         resValue("string", "app_name", "Insta Chat")
     }
 

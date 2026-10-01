@@ -106,10 +106,20 @@ the browser, by design.
 ## When notifications stop
 
 - **"Logged out of Instagram"** was posted: open the app and log in again.
-- **Nothing at all**: Android may be deferring the check. Battery optimisation on some
-  phones (Xiaomi, Huawei, some Samsung modes) stops WorkManager outright; set the app to
-  "Unrestricted" under App info > Battery.
-- **Still nothing**: Instagram may have changed the inbox response. The worker logs why:
+- **Nothing at all**: set the app to **Unrestricted** under App info > Battery. This is
+  required, not optional, if Power saving mode is ever on: it cuts every background app
+  off the network, except those set to Unrestricted. Messaging apps get through on
+  Google's push service, which this app cannot use, so its check never comes due -
+  `dumpsys netpolicy` shows `blocked=BATTERY_SAVER|APP_BACKGROUND` for its uid. Found on
+  the S23 on 0.4. The same over adb (survives updates, not an uninstall):
+
+```powershell
+adb shell dumpsys deviceidle whitelist +com.instachat.app
+```
+
+- **Still nothing**: every check logs one line - thread count, how many are unread, and
+  for each thread newer than the last check whether it was `own`, `read`, `muted` or
+  `unread`:
 
 ```powershell
 adb logcat -s InboxWorker
