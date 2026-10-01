@@ -149,9 +149,9 @@ fun notifyLoggedOut(context: Context) {
 }
 
 /**
- * Say once that the battery exemption is gone. Posted from a check that did get through,
- * which may well be the last one before Power saving mode or a sleeping-apps sweep stops
- * them. Tapping it opens the app, which asks for the exemption back.
+ * Say once that the battery exemption is gone. The check does not wait for a network, so
+ * it runs - and can post this - even while Power saving mode is cutting it off. Tapping
+ * it opens the app, whose banner asks for the exemption back.
  */
 fun notifyRestricted(context: Context) {
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
@@ -172,9 +172,23 @@ fun notifyRestricted(context: Context) {
     NotificationManagerCompat.from(context).notify(RESTRICTED_ID, notification)
 }
 
-/** Clear everything: opening the app is reading the messages. */
-fun cancelAllNotifications(context: Context) {
-    NotificationManagerCompat.from(context).cancelAll()
+/**
+ * Clear what opening the app answers: the messages (opening it is reading them) and the
+ * "logged out" notice (it shows the login page). The battery warning stays until the
+ * exemption is actually back - see [cancelRestricted].
+ */
+fun cancelOnOpen(context: Context) {
+    val manager = context.getSystemService(NotificationManager::class.java)
+    // Message notifications are tagged with their thread id, so they can only be found
+    // by asking which are showing.
+    manager.activeNotifications
+        .filter { it.notification.channelId == MESSAGES_CHANNEL_ID }
+        .forEach { manager.cancel(it.tag, it.id) }
+    manager.cancel(LOGGED_OUT_ID)
+}
+
+fun cancelRestricted(context: Context) {
+    NotificationManagerCompat.from(context).cancel(RESTRICTED_ID)
 }
 
 private fun openIntent(

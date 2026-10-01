@@ -1,13 +1,12 @@
 package com.instachat.app.notify
 
 import android.content.Context
+import android.net.ConnectivityManager
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebSettings
-import androidx.work.Constraints
 import androidx.work.CoroutineWorker
 import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
 import androidx.work.WorkerParameters
@@ -48,6 +47,18 @@ class InboxWorker(
         }
         val state = NotifierState(applicationContext)
         checkExemption(state)
+
+        // The job does not require a network (see [schedule]), so this is where a run
+        // without one ends. getActiveNetwork() is also null while the app is blocked from
+        // the network, as Power saving mode does to non-exempt apps.
+        val connectivity = applicationContext.getSystemService(ConnectivityManager::class.java)
+        if (connectivity.activeNetwork == null) {
+            Log.i(
+                TAG,
+                "No usable network, skipping (exempt: ${isBatteryExempt(applicationContext)})",
+            )
+            return Result.success()
+        }
 
         return when (val fetched = InboxClient().fetch(session, userAgent)) {
             is FetchResult.Transient -> {
@@ -109,6 +120,7 @@ class InboxWorker(
     private fun checkExemption(state: NotifierState) {
         if (isBatteryExempt(applicationContext)) {
             state.restrictedNotified = false
+            cancelRestricted(applicationContext)
         } else if (!state.restrictedNotified) {
             Log.i(TAG, "Not battery-exempt: checks stop whenever Power saving mode is on")
             notifyRestricted(applicationContext)
@@ -150,22 +162,22 @@ class InboxWorker(
         /**
          * Register the periodic check. Safe to call on every launch.
          *
-         * KEEP, not UPDATE: replacing the request on each start would reset its period, so
-         * an app opened often would never sit long enough for the work to come due.
+         * No network constraint, deliberately. With one, a check cut off by Power saving
+         * mode never runs at all, and so can never say why notifications stopped; without
+         * one it runs, posts the warning, and returns at the network check in [doWork].
+         *
+         * UPDATE, not REPLACE: UPDATE keeps the existing schedule, so an app opened often
+         * still lets the work come due, while installs from before this change pick up the
+         * dropped constraint. REPLACE would restart the period on every launch.
          */
         fun schedule(context: Context) {
             val request =
                 PeriodicWorkRequestBuilder<InboxWorker>(INTERVAL_MINUTES, TimeUnit.MINUTES)
-                    .setConstraints(
-                        Constraints
-                            .Builder()
-                            .setRequiredNetworkType(NetworkType.CONNECTED)
-                            .build(),
-                    ).build()
+                    .build()
 
             WorkManager.getInstance(context).enqueueUniquePeriodicWork(
                 WORK_NAME,
-                ExistingPeriodicWorkPolicy.KEEP,
+                ExistingPeriodicWorkPolicy.UPDATE,
                 request,
             )
         }

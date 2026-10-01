@@ -26,10 +26,16 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.instachat.app.notify.AppVisibility
+import com.instachat.app.notify.Blocker
 import com.instachat.app.notify.NotifierState
-import com.instachat.app.notify.cancelAllNotifications
+import com.instachat.app.notify.bannerFor
+import com.instachat.app.notify.blockerOf
+import com.instachat.app.notify.cancelOnOpen
+import com.instachat.app.notify.cancelRestricted
+import com.instachat.app.notify.dismissalAfter
 import com.instachat.app.notify.isBatteryExempt
 import com.instachat.app.notify.notificationPermissionIsRuntime
+import com.instachat.app.notify.openNotificationSettings
 import com.instachat.app.notify.requestBatteryExemption
 import com.instachat.app.notify.shouldAskForExemption
 import com.instachat.app.ui.ChatScreen
@@ -52,6 +58,9 @@ class MainActivity : ComponentActivity() {
     /** True while a shared post or reel is open, which puts the "back to chat" bar up. */
     private var viewingItem by mutableStateOf(false)
 
+    /** What is stopping message notifications, shown over the chat until fixed or dismissed. */
+    private var banner by mutableStateOf<Blocker?>(null)
+
     private var pendingFiles: ValueCallback<Array<Uri>>? = null
     private var pendingMedia: PermissionRequest? = null
 
@@ -69,10 +78,9 @@ class MainActivity : ComponentActivity() {
 
     // A refusal just means no notifications, which the system settings page already
     // explains - and then the battery exemption would buy nothing, so it is not asked for.
+    // Either way the answer is acted on in onResume, which follows the dialog closing.
     private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-            if (granted) askForExemptionIfNeeded()
-        }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -103,8 +111,6 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
-        } else if (NotificationManagerCompat.from(this).areNotificationsEnabled()) {
-            askForExemptionIfNeeded()
         }
 
         setContent {
@@ -113,6 +119,9 @@ class MainActivity : ComponentActivity() {
                     webView = webView,
                     viewingItem = viewingItem,
                     onBackToChat = { client.backToChat(webView) },
+                    banner = banner,
+                    onFixBanner = ::fixBlocker,
+                    onDismissBanner = ::dismissBanner,
                 )
             }
         }
@@ -225,20 +234,6 @@ class MainActivity : ComponentActivity() {
             else -> null
         }
 
-    /**
-     * Without the battery exemption no inbox check runs while Power saving mode is on, so
-     * notifications silently stop. See `notify/BatteryExemption.kt`.
-     */
-    private fun askForExemptionIfNeeded() {
-        val state = NotifierState(this)
-        val exempt = isBatteryExempt(this)
-        if (shouldAskForExemption(exempt, state.exemptionAsked, state.wasExempt)) {
-            state.exemptionAsked = true
-            requestBatteryExemption(this)
-        }
-        state.wasExempt = exempt
-    }
-
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED
 
@@ -321,12 +316,55 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppVisibility.inForeground = true
-        cancelAllNotifications(this)
+        cancelOnOpen(this)
     }
 
     override fun onResume() {
         super.onResume()
         webView.onResume()
+        // Every resume, not only launch: coming back from the permission dialog, the
+        // exemption dialog or the settings is a resume, and has to be acted on.
+        checkNotificationHealth()
+    }
+
+    /**
+     * Without the battery exemption no inbox check runs while Power saving mode is on, so
+     * notifications silently stop. See `notify/BatteryExemption.kt`. Asks with the system
+     * dialog when [shouldAskForExemption] says so, and otherwise puts up the banner.
+     *
+     * The exemption is recorded on every resume, so granting it in the dialog counts as
+     * having had it, and losing it later is noticed without the app being restarted.
+     */
+    private fun checkNotificationHealth() {
+        val state = NotifierState(this)
+        val notificationsEnabled = NotificationManagerCompat.from(this).areNotificationsEnabled()
+        val exempt = isBatteryExempt(this)
+        // With notifications off the exemption would buy nothing: the banner asks for
+        // notifications first, and the dialog waits until they are on.
+        if (notificationsEnabled &&
+            shouldAskForExemption(exempt, state.exemptionAsked, state.wasExempt)
+        ) {
+            state.exemptionAsked = true
+            requestBatteryExemption(this)
+        }
+        state.wasExempt = exempt
+
+        val blocker = blockerOf(notificationsEnabled, exempt)
+        if (blocker == null) cancelRestricted(this)
+        state.dismissedBlocker = dismissalAfter(blocker, state.dismissedBlocker)
+        banner = bannerFor(blocker, state.dismissedBlocker)
+    }
+
+    private fun fixBlocker(blocker: Blocker) {
+        when (blocker) {
+            Blocker.NOTIFICATIONS_OFF -> openNotificationSettings(this)
+            Blocker.NOT_EXEMPT -> requestBatteryExemption(this)
+        }
+    }
+
+    private fun dismissBanner(blocker: Blocker) {
+        NotifierState(this).dismissedBlocker = blocker
+        banner = null
     }
 
     override fun onPause() {

@@ -67,8 +67,12 @@ account; the WebView is Instagram's own web client and looks like a browser to i
 - **Notifications need the battery exemption.** With Power saving mode on, Android cuts
   every non-exempt background app off the network, so the job's CONNECTIVITY constraint
   is never met and no check runs - silently. 0.4 delivered nothing on the S23 for this
-  reason. `notify/BatteryExemption.kt` asks on launch (once, and again if it is lost);
-  the worker warns once if it runs without it. Diagnose with `adb logcat -s InboxWorker`
+  reason. `notify/BatteryExemption.kt` holds the rules: the system dialog once, and again
+  if an exemption the app had is lost (checked on every resume); otherwise a dismissable
+  banner, also for notifications being off. The job deliberately has **no network
+  constraint** - with one, a cut-off check never runs and so can never post the
+  "may stop" warning; it returns at an `activeNetwork == null` check instead. Opening the
+  app clears message and logged-out notifications, never that warning. Diagnose with `adb logcat -s InboxWorker`
   (one line per check) and `dumpsys netpolicy` (`blocked_state` for the app's uid).
 - The debug build is a separate app id with its own WebView profile - a second login.
 - Verifying real behaviour needs a logged-in account on a device; unit tests cover the

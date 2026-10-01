@@ -48,7 +48,19 @@ class NotifierState(
         get() = prefs.getBoolean(KEY_RESTRICTED, false)
         set(value) = prefs.edit { putBoolean(KEY_RESTRICTED, value) }
 
+    /** The blocker whose banner the user dismissed, until that problem clears. */
+    var dismissedBlocker: Blocker?
+        get() {
+            val name = prefs.getString(KEY_DISMISSED, null)
+            return Blocker.entries.firstOrNull { it.name == name }
+        }
+        set(value) =
+            prefs.edit {
+                if (value == null) remove(KEY_DISMISSED) else putString(KEY_DISMISSED, value.name)
+            }
+
     private companion object {
+        const val KEY_DISMISSED = "dismissed_blocker"
         const val KEY_WATERMARK = "watermark_micros"
         const val KEY_LOGGED_OUT = "logged_out_notified"
         const val KEY_EXEMPTION_ASKED = "exemption_asked"

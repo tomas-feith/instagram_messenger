@@ -28,13 +28,52 @@ fun isBatteryExempt(context: Context): Boolean =
  * Whether to show the system's exemption dialog on this launch.
  *
  * Once, the first time it is missing; after that only when an exemption the app had has
- * gone again. A user who said no is not asked on every launch.
+ * gone again. A user who said no is not asked on every launch - the banner
+ * ([bannerFor]) says what that costs instead.
  */
 fun shouldAskForExemption(
     exempt: Boolean,
     askedBefore: Boolean,
     wasExempt: Boolean,
 ): Boolean = !exempt && (!askedBefore || wasExempt)
+
+/** What keeps message notifications from arriving, in the order it should be fixed. */
+enum class Blocker {
+    /** Notifications are off for the app: nothing can be shown at all. */
+    NOTIFICATIONS_OFF,
+
+    /** No battery exemption: checks stop whenever Power saving mode is on. */
+    NOT_EXEMPT,
+}
+
+fun blockerOf(
+    notificationsEnabled: Boolean,
+    exempt: Boolean,
+): Blocker? =
+    when {
+        !notificationsEnabled -> Blocker.NOTIFICATIONS_OFF
+        !exempt -> Blocker.NOT_EXEMPT
+        else -> null
+    }
+
+/**
+ * The banner to show over the chat, if any: the current [blocker], unless the user has
+ * dismissed that same one. A dismissal holds until the problem has cleared, so a choice
+ * is respected but a later, separate loss is still reported.
+ */
+fun bannerFor(
+    blocker: Blocker?,
+    dismissed: Blocker?,
+): Blocker? = blocker?.takeIf { it != dismissed }
+
+/**
+ * The dismissal to keep after seeing [blocker]: forgotten once nothing blocks, so the
+ * banner comes back if the problem does.
+ */
+fun dismissalAfter(
+    blocker: Blocker?,
+    dismissed: Blocker?,
+): Blocker? = if (blocker == null) null else dismissed
 
 /**
  * Ask for the exemption with the system's own yes/no dialog, falling back to the list of
@@ -57,7 +96,19 @@ fun requestBatteryExemption(context: Context) {
         try {
             context.startActivity(Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS))
         } catch (_: ActivityNotFoundException) {
-            // Nothing left to open. The warning notification still says what to change.
+            // Nothing left to open. The banner still says what to change.
         }
+    }
+}
+
+/** Open the app's notification settings, where notifications can be turned back on. */
+fun openNotificationSettings(context: Context) {
+    val intent =
+        Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+            .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+    try {
+        context.startActivity(intent)
+    } catch (_: ActivityNotFoundException) {
+        // No settings screen to open; the banner's text is all that can be done.
     }
 }
