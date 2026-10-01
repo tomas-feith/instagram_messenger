@@ -41,9 +41,12 @@ release install.
 
 1. Allow notifications when asked. Without that the app still works; it just never
    tells you about a message.
-2. Log in. The app opens straight on Instagram's login page and, once you are in, on your
+2. Then answer **OK** to "Stop optimising battery usage?". Without it no check runs while
+   Power saving mode is on ([below](#when-notifications-stop)). The app asks once, and
+   again on any later launch that finds the exemption gone.
+3. Log in. The app opens straight on Instagram's login page and, once you are in, on your
    inbox.
-3. The first background check, up to 15 minutes later, only records where your inbox is.
+4. The first background check, up to 15 minutes later, only records where your inbox is.
    Notifications start with the messages that arrive after it.
 
 ## Updating
@@ -111,7 +114,9 @@ the browser, by design.
   off the network, except those set to Unrestricted. Messaging apps get through on
   Google's push service, which this app cannot use, so its check never comes due -
   `dumpsys netpolicy` shows `blocked=BATTERY_SAVER|APP_BACKGROUND` for its uid. Found on
-  the S23 on 0.4. The same over adb (survives updates, not an uninstall):
+  the S23 on 0.4. Since 0.6 the app asks for it on launch, and a check that finds it
+  gone posts "Message notifications may stop". The same over adb (survives updates, not
+  an uninstall):
 
 ```powershell
 adb shell dumpsys deviceidle whitelist +com.instachat.app

@@ -47,6 +47,7 @@ class InboxWorker(
             return Result.success()
         }
         val state = NotifierState(applicationContext)
+        checkExemption(state)
 
         return when (val fetched = InboxClient().fetch(session, userAgent)) {
             is FetchResult.Transient -> {
@@ -101,6 +102,17 @@ class InboxWorker(
                         "newSinceWatermark=[${describeNew(inbox, watermark)}]",
                 )
             }
+        }
+    }
+
+    /** Warn once when the battery exemption has gone, and re-arm once it is back. */
+    private fun checkExemption(state: NotifierState) {
+        if (isBatteryExempt(applicationContext)) {
+            state.restrictedNotified = false
+        } else if (!state.restrictedNotified) {
+            Log.i(TAG, "Not battery-exempt: checks stop whenever Power saving mode is on")
+            notifyRestricted(applicationContext)
+            state.restrictedNotified = true
         }
     }
 

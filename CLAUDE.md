@@ -64,6 +64,12 @@ account; the WebView is Instagram's own web client and looks like a browser to i
   WRAP_CONTENT, which makes the page's root 0px tall; instagram.com lays everything out
   from `height: 100%`, so 0.1 rendered a blank background on every page. The emulator
   showed the same symptom and it was first misread as an outdated WebView - it was not.
+- **Notifications need the battery exemption.** With Power saving mode on, Android cuts
+  every non-exempt background app off the network, so the job's CONNECTIVITY constraint
+  is never met and no check runs - silently. 0.4 delivered nothing on the S23 for this
+  reason. `notify/BatteryExemption.kt` asks on launch (once, and again if it is lost);
+  the worker warns once if it runs without it. Diagnose with `adb logcat -s InboxWorker`
+  (one line per check) and `dumpsys netpolicy` (`blocked_state` for the app's uid).
 - The debug build is a separate app id with its own WebView profile - a second login.
 - Verifying real behaviour needs a logged-in account on a device; unit tests cover the
   policy, the parser and the HTTP client, not the site. `chrome://inspect` works on

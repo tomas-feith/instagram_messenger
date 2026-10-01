@@ -22,11 +22,16 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import com.instachat.app.notify.AppVisibility
+import com.instachat.app.notify.NotifierState
 import com.instachat.app.notify.cancelAllNotifications
+import com.instachat.app.notify.isBatteryExempt
 import com.instachat.app.notify.notificationPermissionIsRuntime
+import com.instachat.app.notify.requestBatteryExemption
+import com.instachat.app.notify.shouldAskForExemption
 import com.instachat.app.ui.ChatScreen
 import com.instachat.app.ui.theme.InstaChatTheme
 import com.instachat.app.web.ChatWebViewClient
@@ -62,10 +67,12 @@ class MainActivity : ComponentActivity() {
             pendingMedia = null
         }
 
-    // Nothing to do with the answer: a refusal just means no notifications, which the
-    // system settings page already explains.
+    // A refusal just means no notifications, which the system settings page already
+    // explains - and then the battery exemption would buy nothing, so it is not asked for.
     private val notificationPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) askForExemptionIfNeeded()
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -96,6 +103,8 @@ class MainActivity : ComponentActivity() {
             PackageManager.PERMISSION_GRANTED
         ) {
             notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else if (NotificationManagerCompat.from(this).areNotificationsEnabled()) {
+            askForExemptionIfNeeded()
         }
 
         setContent {
@@ -215,6 +224,20 @@ class MainActivity : ComponentActivity() {
             PermissionRequest.RESOURCE_VIDEO_CAPTURE -> Manifest.permission.CAMERA
             else -> null
         }
+
+    /**
+     * Without the battery exemption no inbox check runs while Power saving mode is on, so
+     * notifications silently stop. See `notify/BatteryExemption.kt`.
+     */
+    private fun askForExemptionIfNeeded() {
+        val state = NotifierState(this)
+        val exempt = isBatteryExempt(this)
+        if (shouldAskForExemption(exempt, state.exemptionAsked, state.wasExempt)) {
+            state.exemptionAsked = true
+            requestBatteryExemption(this)
+        }
+        state.wasExempt = exempt
+    }
 
     private fun isGranted(permission: String): Boolean =
         ContextCompat.checkSelfPermission(this, permission) == PackageManager.PERMISSION_GRANTED

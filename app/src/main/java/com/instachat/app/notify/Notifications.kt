@@ -27,6 +27,7 @@ const val ACCOUNT_CHANNEL_ID = "account"
 private const val MESSAGE_ID = 1
 private const val SUMMARY_ID = 2
 private const val LOGGED_OUT_ID = 3
+private const val RESTRICTED_ID = 4
 
 private const val GROUP_KEY = "com.instachat.app.MESSAGES"
 
@@ -54,7 +55,7 @@ fun ensureChannels(context: Context) {
             "Account",
             NotificationManager.IMPORTANCE_DEFAULT,
         ).apply {
-            description = "Tells you when Instagram has logged you out."
+            description = "Tells you when something will stop message notifications."
         },
     )
 }
@@ -145,6 +146,30 @@ fun notifyLoggedOut(context: Context) {
             .setContentIntent(openIntent(context, null))
             .build()
     NotificationManagerCompat.from(context).notify(LOGGED_OUT_ID, notification)
+}
+
+/**
+ * Say once that the battery exemption is gone. Posted from a check that did get through,
+ * which may well be the last one before Power saving mode or a sleeping-apps sweep stops
+ * them. Tapping it opens the app, which asks for the exemption back.
+ */
+fun notifyRestricted(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        return
+    }
+    val notification =
+        NotificationCompat
+            .Builder(context, ACCOUNT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Message notifications may stop")
+            .setContentText("Open Insta Chat and allow it to run in the background.")
+            .setAutoCancel(true)
+            .setContentIntent(openIntent(context, null))
+            .build()
+    NotificationManagerCompat.from(context).notify(RESTRICTED_ID, notification)
 }
 
 /** Clear everything: opening the app is reading the messages. */

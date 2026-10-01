@@ -4,6 +4,9 @@
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Lets the app show the system's "allow in background" dialog. Without the exemption,
+         Power saving mode cuts the inbox check off the network. See BatteryExemption.kt. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <!--
         Voice messages and video. Asked for only when the page asks for the microphone or
