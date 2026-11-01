@@ -17,6 +17,24 @@ class InboxClientTest {
 
     private val session =
         Session.fromCookieHeader("csrftoken=tok; ds_user_id=1000; sessionid=abc%3Adef")!!
+    private val query = InboxQuery("123", """{"a":1}""")
+    private val cached = Tokens("cached-dtsg", "cached-lsd")
+
+    private val emptyInbox =
+        """{"data":{"get_slide_mailbox_for_iris_subscription":{"threads_by_folder":""" +
+            """{"edges":[]}}}}"""
+    private val inboxPage =
+        """<script>["DTSGInitialData",[],{"token":"page-dtsg"},258],""" +
+            """["LSD",[],{"token":"page-lsd"},323]</script>"""
+
+    private fun json(body: String) =
+        MockResponse().setHeader("Content-Type", "text/javascript; charset=utf-8").setBody(body)
+
+    private fun html(body: String) =
+        MockResponse().setHeader("Content-Type", "text/html; charset=\"utf-8\"").setBody(body)
+
+    private suspend fun fetch(tokens: Tokens? = cached) =
+        client.fetch(session, "UA/1", query, tokens)
 
     @Before
     fun setUp() {
@@ -36,29 +54,104 @@ class InboxClientTest {
     }
 
     @Test
-    fun `sends the session the way the site does`() =
+    fun `sends the query and session the way the site does`() =
         runTest {
-            server.enqueue(MockResponse().setBody("""{"inbox":{"threads":[]}}"""))
+            server.enqueue(json(emptyInbox))
 
-            client.fetch(session, "UA/1")
+            fetch()
 
             val request = server.takeRequest()
-            assertEquals("/api/v1/direct_v2/inbox/", request.requestUrl?.encodedPath)
-            assertEquals("1", request.requestUrl?.queryParameter("thread_message_limit"))
+            assertEquals("POST", request.method)
+            assertEquals("/api/graphql", request.requestUrl?.encodedPath)
+            val form = parseForm(request.body.readUtf8())
+            assertEquals("123", form["doc_id"])
+            assertEquals("""{"a":1}""", form["variables"])
+            assertEquals("cached-dtsg", form["fb_dtsg"])
+            assertEquals("cached-lsd", form["lsd"])
             assertEquals(session.cookieHeader, request.getHeader("Cookie"))
             assertEquals("tok", request.getHeader("X-CSRFToken"))
+            assertEquals("cached-lsd", request.getHeader("X-FB-LSD"))
             assertEquals(InboxClient.WEB_APP_ID, request.getHeader("X-IG-App-ID"))
             assertEquals("UA/1", request.getHeader("User-Agent"))
+            // Without these the endpoint answers with a page, as for a refused token.
+            assertEquals("same-origin", request.getHeader("Sec-Fetch-Site"))
+            assertEquals("cors", request.getHeader("Sec-Fetch-Mode"))
         }
 
     @Test
-    fun `a good response is parsed with the cookie viewer`() =
+    fun `a good response is parsed and the tokens kept`() =
         runTest {
-            server.enqueue(MockResponse().setBody("""{"inbox":{"threads":[]}}"""))
+            server.enqueue(json(emptyInbox))
 
-            val result = client.fetch(session, "UA")
+            assertEquals(FetchResult.Done(InboxResult.Parsed(emptyList()), cached), fetch())
+            assertEquals(1, server.requestCount)
+        }
 
-            assertEquals(FetchResult.Done(InboxResult.Parsed("1000", emptyList())), result)
+    @Test
+    fun `without tokens they are read from the inbox page first`() =
+        runTest {
+            server.enqueue(html(inboxPage))
+            server.enqueue(json(emptyInbox))
+
+            val result = fetch(tokens = null)
+
+            assertEquals(
+                FetchResult.Done(InboxResult.Parsed(emptyList()), Tokens("page-dtsg", "page-lsd")),
+                result,
+            )
+            assertEquals("/direct/inbox/", server.takeRequest().requestUrl?.encodedPath)
+            assertEquals("page-dtsg", parseForm(server.takeRequest().body.readUtf8())["fb_dtsg"])
+        }
+
+    @Test
+    fun `refused tokens are replaced once, then the call is repeated`() =
+        runTest {
+            // A refused fb_dtsg is answered with a page, not an error.
+            server.enqueue(html("<!DOCTYPE html><html>"))
+            server.enqueue(html(inboxPage))
+            server.enqueue(json(emptyInbox))
+
+            val result = fetch()
+
+            assertEquals(Tokens("page-dtsg", "page-lsd"), (result as FetchResult.Done).tokens)
+            assertEquals(3, server.requestCount)
+        }
+
+    @Test
+    fun `fresh tokens refused too is unreadable, not a loop`() =
+        runTest {
+            server.enqueue(html("<!DOCTYPE html><html>"))
+            server.enqueue(html(inboxPage))
+            server.enqueue(html("<!DOCTYPE html><html>"))
+
+            val result = fetch()
+
+            assertEquals(FetchResult.Done(InboxResult.Unreadable("fresh tokens refused")), result)
+            assertEquals(3, server.requestCount)
+        }
+
+    @Test
+    fun `an inbox page without tokens is unreadable`() =
+        runTest {
+            server.enqueue(html("<html>nothing here</html>"))
+
+            val result = fetch(tokens = null) as FetchResult.Done
+
+            assertTrue(result.inbox is InboxResult.Unreadable)
+            assertNull(result.tokens)
+        }
+
+    @Test
+    fun `a stale query is unreadable and keeps no tokens`() =
+        runTest {
+            server.enqueue(
+                json("""{"errors":[{"message":"The GraphQL document was not found."}]}"""),
+            )
+
+            val result = fetch() as FetchResult.Done
+
+            assertTrue(result.inbox is InboxResult.Unreadable)
+            assertNull(result.tokens)
         }
 
     @Test
@@ -68,7 +161,7 @@ class InboxClientTest {
                 MockResponse().setResponseCode(302).setHeader("Location", "/accounts/login/"),
             )
 
-            assertEquals(FetchResult.Done(InboxResult.LoggedOut), client.fetch(session, "UA"))
+            assertEquals(FetchResult.Done(InboxResult.LoggedOut), fetch(tokens = null))
             assertEquals(1, server.requestCount)
         }
 
@@ -76,16 +169,15 @@ class InboxClientTest {
     fun `a 401 is logged out`() =
         runTest {
             server.enqueue(MockResponse().setResponseCode(401).setBody("nope"))
-            assertEquals(FetchResult.Done(InboxResult.LoggedOut), client.fetch(session, "UA"))
+            assertEquals(FetchResult.Done(InboxResult.LoggedOut), fetch())
         }
 
     @Test
-    fun `a 403 that says login required is logged out`() =
+    fun `a 404 is unreadable, not transient`() =
         runTest {
-            server.enqueue(
-                MockResponse().setResponseCode(403).setBody("""{"message":"login_required"}"""),
-            )
-            assertEquals(FetchResult.Done(InboxResult.LoggedOut), client.fetch(session, "UA"))
+            // How the retired endpoint failed: retried silently, it hid the breakage.
+            server.enqueue(MockResponse().setResponseCode(404))
+            assertEquals(FetchResult.Done(InboxResult.Unreadable("HTTP 404")), fetch())
         }
 
     @Test
@@ -94,15 +186,15 @@ class InboxClientTest {
             server.enqueue(MockResponse().setResponseCode(429))
             server.enqueue(MockResponse().setResponseCode(503))
 
-            assertTrue(client.fetch(session, "UA") is FetchResult.Transient)
-            assertTrue(client.fetch(session, "UA") is FetchResult.Transient)
+            assertTrue(fetch() is FetchResult.Transient)
+            assertTrue(fetch() is FetchResult.Transient)
         }
 
     @Test
     fun `no connection is transient`() =
         runTest {
             server.shutdown()
-            assertTrue(client.fetch(session, "UA") is FetchResult.Transient)
+            assertTrue(fetch() is FetchResult.Transient)
         }
 
     @Test
@@ -117,6 +209,5 @@ class InboxClientTest {
     fun `cookie values may contain equals signs`() {
         val parsed = Session.fromCookieHeader("sessionid=a=b; csrftoken=x=y")
         assertEquals("x=y", parsed?.csrfToken)
-        assertNull(parsed?.viewerId)
     }
 }

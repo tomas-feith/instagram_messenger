@@ -1,69 +1,60 @@
-{
-  "viewer": {"pk": 1000, "username": "me"},
-  "inbox": {
-    "threads": [
-      {
-        "thread_id": "340282366841710300949128000000000001",
-        "thread_v2_id": "t-unread",
-        "thread_title": "alice",
-        "is_group": false,
-        "muted": false,
-        "users": [{"pk": "2000", "username": "alice", "full_name": "Alice A"}],
-        "items": [
-          {"item_id": "i1", "user_id": 2000, "timestamp": "1727700000000200", "item_type": "text", "text": "are you coming?"}
-        ],
-        "last_seen_at": {"1000": {"timestamp": "1727700000000100", "item_id": "i0"}}
-      },
-      {
-        "thread_id": "t-read",
-        "thread_title": "bob",
-        "users": [{"pk": 3000, "username": "bob", "full_name": ""}],
-        "items": [
-          {"item_id": "i2", "user_id": 3000, "timestamp": 1727700000000300, "item_type": "clip"}
-        ],
-        "last_seen_at": {"1000": {"timestamp": "1727700000000300"}}
-      },
-      {
-        "thread_id": "t-mine",
-        "thread_title": "carol",
-        "users": [{"pk": 4000, "username": "carol"}],
-        "items": [
-          {"item_id": "i3", "user_id": 1000, "timestamp": "1727700000000400", "item_type": "text", "text": "see you"}
-        ],
-        "last_seen_at": {}
-      },
-      {
-        "thread_id": "t-group",
-        "thread_title": "",
-        "is_group": true,
-        "users": [
-          {"pk": 5000, "username": "dave", "full_name": "Dave D"},
-          {"pk": 6000, "username": "erin", "full_name": "Erin E"}
-        ],
-        "items": [
-          {"item_id": "i4", "user_id": "6000", "timestamp": "1727700000000500", "item_type": "media_share"}
-        ]
-      },
-      {
-        "thread_id": "t-muted",
-        "thread_title": "noisy",
-        "muted": true,
-        "users": [{"pk": 7000, "username": "noisy"}],
-        "items": [
-          {"item_id": "i5", "user_id": 7000, "timestamp": "1727700000000600", "item_type": "text", "text": "spam"}
-        ]
-      },
-      {
-        "thread_title": "no id, skipped"
-      },
-      {
-        "thread_id": "t-empty",
-        "thread_title": "nothing yet",
-        "users": [],
-        "items": []
-      }
-    ],
-    "unseen_count": 2
-  },
-  "status": "ok"
-}
+{"data":{"get_slide_mailbox_for_iris_subscription":{"iris_inactive_subscription_uq_seq_id":"1","threads_by_folder":{"edges":[
+{"node":{"__typename":"SlideThread","id":"t-unread","as_ig_direct_thread":{
+  "id":"t-unread","thread_fbid":"t-unread","thread_id":"340282366841710300949128000000000001",
+  "thread_title":"alice","is_group":false,"is_muted":false,"marked_as_unread":false,
+  "last_activity_timestamp_ms":"1727700000200",
+  "users":[{"id":"501","interop_messaging_user_fbid":"17001","full_name":"Alice A","username":"alice"}],
+  "viewer":{"id":"500","interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[
+    {"participant_fbid":"17001","watermark_timestamp_ms":"1727700000200"},
+    {"participant_fbid":"17000","watermark_timestamp_ms":"1727700000100"}],
+  "slide_messages":{"edges":[
+    {"node":{"__typename":"SlideMessage","sender_fbid":"17001","timestamp_ms":"1727700000200","content_type":"TEXT","text_body":"are you coming?","igd_snippet":"are you coming?"}},
+    {"node":{"__typename":"SlideMessage","sender_fbid":"17000","timestamp_ms":"1727700000100","content_type":"TEXT","text_body":"hey","igd_snippet":"You: hey"}}]}}}},
+{"node":{"id":"t-read","as_ig_direct_thread":{
+  "id":"t-read","thread_fbid":"t-read","thread_title":"bob","is_group":false,"is_muted":false,
+  "users":[{"interop_messaging_user_fbid":"17002","full_name":"Bob B","username":"bob"}],
+  "viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[{"participant_fbid":17000,"watermark_timestamp_ms":1727700000300}],
+  "slide_messages":{"edges":[
+    {"node":{"sender_fbid":17002,"timestamp_ms":1727700000300,"content_type":"TEXT","text_body":"ok","igd_snippet":"ok"}}]}}}},
+{"node":{"id":"t-mine","as_ig_direct_thread":{
+  "id":"t-mine","thread_fbid":"t-mine","thread_title":"carol","is_group":false,"is_muted":false,
+  "users":[{"interop_messaging_user_fbid":"17003","full_name":"Carol C","username":"carol"}],
+  "viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[],
+  "slide_messages":{"edges":[
+    {"node":{"sender_fbid":"17000","timestamp_ms":"1727700000350","content_type":"TEXT","text_body":"see you","igd_snippet":"You: see you"}}]}}}},
+{"node":{"id":"t-group","as_ig_direct_thread":{
+  "id":"t-group","thread_fbid":"t-group","thread_title":"","is_group":true,"is_muted":false,
+  "users":[
+    {"interop_messaging_user_fbid":"17004","full_name":"Dave D","username":"dave"},
+    {"interop_messaging_user_fbid":"17005","full_name":"","username":"erin"}],
+  "viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[{"participant_fbid":"17004","watermark_timestamp_ms":"1727700000500"}],
+  "slide_messages":{"edges":[
+    {"node":{"sender_fbid":"17005","timestamp_ms":"1727700000500","content_type":"TEXT","text_body":"lunch?","igd_snippet":"erin: lunch?"}}]}}}},
+{"node":{"id":"t-share","as_ig_direct_thread":{
+  "id":"t-share","thread_fbid":"t-share","thread_title":"frank","is_group":false,"is_muted":false,
+  "users":[{"interop_messaging_user_fbid":"17006","full_name":"Frank F","username":"frank"}],
+  "viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[],
+  "slide_messages":{"edges":[
+    {"node":{"sender_fbid":"17006","timestamp_ms":"1727700000400","content_type":"MESSAGE_INLINE_SHARE","text_body":"","igd_snippet":"frank sent an attachment."}}]}}}},
+{"node":{"id":"t-muted","as_ig_direct_thread":{
+  "id":"t-muted","thread_fbid":"t-muted","thread_title":"gina","is_group":false,"is_muted":true,
+  "users":[{"interop_messaging_user_fbid":"17007","full_name":"Gina G","username":"gina"}],
+  "viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[],
+  "slide_messages":{"edges":[
+    {"node":{"sender_fbid":"17007","timestamp_ms":"1727700000600","content_type":"TEXT","text_body":"psst","igd_snippet":"psst"}}]}}}},
+{"node":{"id":"t-empty","as_ig_direct_thread":{
+  "id":"t-empty","thread_fbid":"t-empty","thread_title":"hank","is_group":false,"is_muted":false,
+  "users":[],"viewer":{"interop_messaging_user_fbid":"17000"},
+  "slide_read_receipts":[],"slide_messages":{"edges":[]}}}},
+{"node":{"id":"t-noviewer","as_ig_direct_thread":{
+  "id":"t-noviewer","thread_fbid":"t-noviewer","thread_title":"ivy",
+  "slide_messages":{"edges":[]}}}},
+{"node":{"id":"not-a-thread"}},
+"junk"
+],"page_info":{"end_cursor":"x","has_next_page":true}}}},"extensions":{"is_final":false}}

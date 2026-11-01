@@ -20,6 +20,7 @@ import java.util.concurrent.TimeUnit
  * The periodic inbox check. This is the whole of the notification feature: a WebView cannot
  * receive Instagram's web push, and there is no server, so the app asks the inbox endpoint
  * itself, with the WebView's own session, and posts a local notification for anything new.
+ * The question it asks is the one the site asks to draw its thread list; see InboxClient.
  *
  * Android decides when this actually runs. Fifteen minutes is WorkManager's floor, and Doze
  * stretches it further, so a message can arrive well after it was sent. That is the
@@ -60,7 +61,16 @@ class InboxWorker(
             return Result.success()
         }
 
-        return when (val fetched = InboxClient().fetch(session, userAgent)) {
+        val captured = state.inboxQuery
+        val fetched =
+            InboxClient().fetch(
+                session = session,
+                userAgent = userAgent,
+                query = captured ?: InboxQuery.fallback(),
+                cachedTokens = state.tokens,
+            )
+        val source = if (captured != null) "captured" else "fallback"
+        return when (fetched) {
             is FetchResult.Transient -> {
                 Log.w(TAG, "Inbox check failed (attempt $runAttemptCount): ${fetched.reason}")
                 // A retry is only worth it for a short blip. Beyond that the next periodic
@@ -69,7 +79,8 @@ class InboxWorker(
             }
 
             is FetchResult.Done -> {
-                handle(fetched.inbox, state)
+                fetched.tokens?.let { state.tokens = it }
+                handle(fetched.inbox, state, source)
                 Result.success()
             }
         }
@@ -78,6 +89,7 @@ class InboxWorker(
     private fun handle(
         inbox: InboxResult,
         state: NotifierState,
+        querySource: String,
     ) {
         when (inbox) {
             InboxResult.LoggedOut -> {
@@ -87,14 +99,22 @@ class InboxWorker(
                 }
             }
 
-            // Logged, not surfaced: most likely Instagram changed the response, and there
-            // is nothing the user could do about it from a notification.
-            InboxResult.Unreadable -> {
-                Log.w(TAG, "Inbox response was not readable")
+            // Surfaced, once. A stale query or a format change otherwise looks exactly like
+            // a quiet inbox, which is how the retired endpoint went unnoticed for days.
+            is InboxResult.Unreadable -> {
+                Log.w(TAG, "Inbox not readable (query: $querySource): ${inbox.reason}")
+                if (!state.brokenNotified) {
+                    notifyBroken(applicationContext)
+                    state.brokenNotified = true
+                }
             }
 
             is InboxResult.Parsed -> {
                 state.loggedOutNotified = false
+                if (state.brokenNotified) {
+                    cancelBroken(applicationContext)
+                    state.brokenNotified = false
+                }
                 val watermark = state.watermarkMicros
                 val unread = if (watermark == null) emptyList() else unreadSince(inbox, watermark)
                 val foreground = AppVisibility.inForeground
@@ -108,8 +128,9 @@ class InboxWorker(
                 // `adb logcat -s InboxWorker` which step dropped a message.
                 Log.i(
                     TAG,
-                    "Checked: threads=${inbox.threads.size} unread=${unread.size} " +
-                        "foreground=$foreground watermark=$watermark->$next " +
+                    "Checked (query: $querySource): threads=${inbox.threads.size} " +
+                        "unread=${unread.size} foreground=$foreground " +
+                        "watermark=$watermark->$next " +
                         "newSinceWatermark=[${describeNew(inbox, watermark)}]",
                 )
             }
@@ -142,7 +163,7 @@ class InboxWorker(
                 val last = thread.last ?: return@joinToString "?"
                 val seen = thread.viewerSeenMicros
                 when {
-                    last.senderId == inbox.viewerId -> "own"
+                    last.fromViewer -> "own"
                     seen != null && last.timestampMicros <= seen -> "read"
                     thread.muted -> "muted"
                     else -> "unread"

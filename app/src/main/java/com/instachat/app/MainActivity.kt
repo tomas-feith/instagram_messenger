@@ -25,6 +25,8 @@ import androidx.compose.runtime.setValue
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
+import androidx.webkit.WebViewCompat
+import androidx.webkit.WebViewFeature
 import com.instachat.app.notify.AppVisibility
 import com.instachat.app.notify.Blocker
 import com.instachat.app.notify.NotifierState
@@ -36,6 +38,7 @@ import com.instachat.app.notify.dismissalAfter
 import com.instachat.app.notify.isBatteryExempt
 import com.instachat.app.notify.notificationPermissionIsRuntime
 import com.instachat.app.notify.openNotificationSettings
+import com.instachat.app.notify.parseCapturedRequest
 import com.instachat.app.notify.requestBatteryExemption
 import com.instachat.app.notify.shouldAskForExemption
 import com.instachat.app.ui.ChatScreen
@@ -60,6 +63,9 @@ class MainActivity : ComponentActivity() {
 
     /** What is stopping message notifications, shown over the chat until fixed or dismissed. */
     private var banner by mutableStateOf<Blocker?>(null)
+
+    /** Set once the WebView's render process has died; see [rebuildAfterRendererGone]. */
+    private var rendererGone = false
 
     private var pendingFiles: ValueCallback<Array<Uri>>? = null
     private var pendingMedia: PermissionRequest? = null
@@ -140,36 +146,77 @@ class MainActivity : ComponentActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
 
         val hideChrome = assets.open("hide_chrome.js").bufferedReader().use { it.readText() }
+        val chatScroll = assets.open("chat_scroll.js").bufferedReader().use { it.readText() }
+        val capture =
+            assets.open("capture_inbox_query.js").bufferedReader().use { it.readText() }
+
+        val view =
+            WebView(this).apply {
+                // MATCH_PARENT, not the WRAP_CONTENT that AndroidView assigns a view that has no
+                // layout params. A WebView measured as wrap-content sizes the page to its content
+                // instead of to the screen, so the root element is 0px tall - and instagram.com
+                // hangs its whole layout off height: 100%, so every page rendered as a blank
+                // background. Seen on a real phone with a current WebView, not an emulator quirk.
+                layoutParams =
+                    ViewGroup.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                    )
+                settings.apply {
+                    javaScriptEnabled = true
+                    domStorageEnabled = true
+                    userAgentString = chromeLikeUserAgent(userAgentString)
+                    // Nothing on the device's file system is any business of a web page.
+                    // allowContentAccess is left on: content:// is what the photo picker
+                    // hands back, and attachments are part of messaging.
+                    allowFileAccess = false
+                }
+                webChromeClient = ChatChromeClient()
+            }
+
+        // Without document-start support the capture runs with the page scripts instead,
+        // which misses the inbox's first request but catches every later one.
+        val captureAtStart = installInboxCapture(view, capture)
         client =
             ChatWebViewClient(
-                hideChromeScript = hideChrome,
+                pageScript =
+                    listOfNotNull(capture.takeUnless { captureAtStart }, hideChrome, chatScroll)
+                        .joinToString("\n"),
                 onExternal = ::openExternally,
                 onLocation = { url -> viewingItem = UrlPolicy.kind(url) == UrlPolicy.Kind.ITEM },
+                onRendererGone = ::rebuildAfterRendererGone,
             )
+        view.webViewClient = client
+        return view
+    }
 
-        return WebView(this).apply {
-            // MATCH_PARENT, not the WRAP_CONTENT that AndroidView assigns a view that has no
-            // layout params. A WebView measured as wrap-content sizes the page to its content
-            // instead of to the screen, so the root element is 0px tall - and instagram.com
-            // hangs its whole layout off height: 100%, so every page rendered as a blank
-            // background. Seen on a real phone with a current WebView, not an emulator quirk.
-            layoutParams =
-                ViewGroup.LayoutParams(
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                    ViewGroup.LayoutParams.MATCH_PARENT,
-                )
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                userAgentString = chromeLikeUserAgent(userAgentString)
-                // Nothing on the device's file system is any business of a web page.
-                // allowContentAccess is left on: content:// is what the photo picker
-                // hands back, and attachments are part of messaging.
-                allowFileAccess = false
-            }
-            webViewClient = client
-            webChromeClient = ChatChromeClient()
+    /**
+     * Learn the inbox query from the site's own requests, for the inbox check to make; see
+     * `assets/capture_inbox_query.js`. The bridge exists only for Instagram's origin and
+     * only the main frame is listened to, so an embed cannot plant a query.
+     *
+     * @return whether the capture script was installed at document start.
+     */
+    private fun installInboxCapture(
+        view: WebView,
+        script: String,
+    ): Boolean {
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) return false
+        val state = NotifierState(this)
+        WebViewCompat.addWebMessageListener(
+            view,
+            CAPTURE_BRIDGE,
+            setOf(SITE_ORIGIN),
+        ) { _, message, _, isMainFrame, _ ->
+            val captured =
+                message.data?.takeIf { isMainFrame }?.let(::parseCapturedRequest)
+                    ?: return@addWebMessageListener
+            state.inboxQuery = captured.query
+            captured.tokens?.let { state.tokens = it }
         }
+        if (!WebViewFeature.isFeatureSupported(WebViewFeature.DOCUMENT_START_SCRIPT)) return false
+        WebViewCompat.addDocumentStartJavaScript(view, script, setOf(SITE_ORIGIN))
+        return true
     }
 
     private inner class ChatChromeClient : WebChromeClient() {
@@ -380,9 +427,21 @@ class MainActivity : ComponentActivity() {
         super.onStop()
     }
 
+    /**
+     * A dead renderer leaves a WebView that may only be destroyed, which onDestroy does.
+     * Recreating rebuilds the screen around a new one, back on the last allowed page.
+     */
+    private fun rebuildAfterRendererGone(dead: WebView) {
+        rendererGone = true
+        (dead.parent as? ViewGroup)?.removeView(dead)
+        recreate()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        webView.saveState(outState)
+        // A WebView whose renderer is gone cannot save its state; onCreate then loads the
+        // start URL instead of restoring.
+        if (!rendererGone) webView.saveState(outState)
         outState.putString(KEY_LAST_ALLOWED, client.lastAllowedUrl)
         outState.putString(KEY_LAST_CHAT, client.lastChatUrl)
     }
@@ -397,6 +456,10 @@ class MainActivity : ComponentActivity() {
 
         const val KEY_LAST_ALLOWED = "instachat.lastAllowedUrl"
         const val KEY_LAST_CHAT = "instachat.lastChatUrl"
+
+        /** The name capture_inbox_query.js looks for, and the one origin it exists on. */
+        const val CAPTURE_BRIDGE = "instaChatInbox"
+        const val SITE_ORIGIN = "https://www.instagram.com"
 
         fun isInstagramOrigin(origin: Uri): Boolean {
             val host = origin.host?.lowercase() ?: return false

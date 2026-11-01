@@ -1,5 +1,7 @@
 package com.instachat.app.web
 
+import android.annotation.SuppressLint
+import android.webkit.RenderProcessGoneDetail
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -17,14 +19,23 @@ import android.webkit.WebViewClient
  *   through [doUpdateVisitedHistory] *after* the URL has changed and the new view has
  *   started drawing, so a refusal there has to back out of it again.
  *
- * @param hideChromeScript injected on every page load; see `assets/hide_chrome.js`.
+ * @param pageScript injected on every page load: `assets/hide_chrome.js`,
+ *   `assets/chat_scroll.js`, and the inbox capture where it could not be installed at
+ *   document start (see MainActivity).
  * @param onExternal a URL that belongs in another app.
  * @param onLocation every URL that was allowed to stay on screen.
+ * @param onRendererGone the page's render process died; the WebView can only be destroyed.
+ *
+ * MissingOnRenderProcessGone is suppressed although [onRenderProcessGone] is implemented:
+ * the webkit check also flags every call to the WebViewClient() constructor, to catch an
+ * inline instance with no handler, and Kotlin's supertype call is one.
  */
+@SuppressLint("MissingOnRenderProcessGone")
 class ChatWebViewClient(
-    private val hideChromeScript: String,
+    private val pageScript: String,
     private val onExternal: (String) -> Unit,
     private val onLocation: (String) -> Unit,
+    private val onRendererGone: (view: WebView) -> Unit,
 ) : WebViewClient() {
     /** The last URL the policy let stay on screen. What a refusal returns to. */
     var lastAllowedUrl: String? = null
@@ -78,7 +89,7 @@ class ChatWebViewClient(
         url: String,
     ) {
         super.onPageCommitVisible(view, url)
-        view.evaluateJavascript(hideChromeScript, null)
+        view.evaluateJavascript(pageScript, null)
     }
 
     override fun onPageFinished(
@@ -88,7 +99,19 @@ class ChatWebViewClient(
         super.onPageFinished(view, url)
         // Again at the end: commit-visible can fire before the document exists on some
         // loads, and the script is idempotent, so the second run costs nothing.
-        view.evaluateJavascript(hideChromeScript, null)
+        view.evaluateJavascript(pageScript, null)
+    }
+
+    /**
+     * The renderer crashed or was killed for memory. Without this the system kills the
+     * whole app to go with it; handled, the screen is rebuilt with a new WebView.
+     */
+    override fun onRenderProcessGone(
+        view: WebView,
+        detail: RenderProcessGoneDetail,
+    ): Boolean {
+        onRendererGone(view)
+        return true
     }
 
     /**

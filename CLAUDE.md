@@ -40,19 +40,48 @@ account; the WebView is Instagram's own web client and looks like a browser to i
   snap-aligned item in a vertical snap container), freezes it, and hides every branch
   but the reel that was on screen when it opened. To inspect a release install, flip
   the `FLAG_DEBUGGABLE` check in `createWebView` locally and never commit it.
-- `notify/Inbox.kt` - parses the undocumented `/api/v1/direct_v2/inbox/` response.
-  Defensive by design: a malformed thread is skipped, not fatal; ids and timestamps are
-  accepted as numbers or strings. Timestamps are **microseconds**.
+- `notify/InboxClient.kt` - makes the web inbox's own GraphQL call,
+  `PolarisDirectInboxMobileQuery`, as `POST /api/graphql` with `doc_id`, `variables`,
+  `fb_dtsg` and `lsd`. The REST endpoint `/api/v1/direct_v2/inbox/` this replaced was
+  retired by Instagram: it answered 404 even from inside the logged-in site (2026-11-01).
+- `notify/InboxQuery.kt` + `assets/capture_inbox_query.js` - the `doc_id` lives only in
+  the site's JS bundles and changes when Instagram ships, so it is **learned, not
+  hardcoded**: the page script wraps XHR and fetch, and passes the body of the site's own
+  inbox request to the app through an origin-restricted `addWebMessageListener` bridge
+  (`androidx.webkit`), installed at document start. The worker uses the last captured
+  query, falling back to the one captured on 2026-11-01.
+- `notify/Inbox.kt` - parses the GraphQL response. Defensive by design: a malformed thread
+  is skipped, not fatal; ids and timestamps are accepted as numbers or strings. The
+  response arrives in **milliseconds** and is stored in **microseconds**, the old
+  endpoint's unit, so watermarks saved before the switch still compare correctly.
 - `notify/InboxWorker.kt` - reads cookies from `CookieManager` on the main thread, fetches
   with the WebView's (de-`wv`'d) user agent, notifies, advances the watermark.
+- `assets/chat_scroll.js` - returning to a chat from a shared post or reel makes the site
+  rebuild the thread at the newest message. The script remembers the distance from the
+  bottom per chat and scrolls back to it (loading older pages on the way) only when the
+  same chat comes back straight from an item page. The list is `column-reverse`: scrollTop
+  is 0 at the bottom and negative going up.
 
 ## Things that are not obvious
 
-- Notification thread ids use `thread_v2_id` (what web URLs use), falling back to the
-  legacy `thread_id`. If tapping a notification opens "thread not found", this is the
-  first thing to check.
+- Notification thread ids use `thread_fbid` (what web URLs use - checked by tapping a
+  thread on the device), falling back to `id`. Not `thread_id`, the 39-digit legacy id.
+  If tapping a notification opens "thread not found", this is the first thing to check.
+- Messages and read receipts name people by `interop_messaging_user_fbid`, not their
+  Instagram user id, so the viewer is recognised by `viewer.interop_messaging_user_fbid`.
+- The GraphQL call needs `Sec-Fetch-Site/Mode/Dest` headers. A browser adds them itself,
+  so every in-page test passed while the worker got an HTML page; found by replaying the
+  worker's request from a PC. `Origin`, `X-IG-App-ID` and client hints made no difference.
+- How the GraphQL call fails, measured: a stale `doc_id` is a JSON error ("document ...
+  was not found"); a bad `fb_dtsg` - or missing Sec-Fetch headers - is a 200 **HTML**
+  page; `lsd` was not checked. The
+  client caches the tokens and re-reads them from the ~450 KB inbox page only when refused.
+- Every unreadable answer - stale query, refused tokens, a 404 - posts the "stopped
+  working" notification once. A 404 used to be retried silently as transient, which is
+  why the retired endpoint went unnoticed for days.
 - `X-IG-App-ID: 936619743392459` is the public id of the instagram.com web client. The
-  endpoint refuses requests without it.
+  retired REST endpoint refused requests without it; GraphQL did not check it when
+  measured, and it is still sent because the site sends it.
 - Redirects are not followed by the worker's OkHttp client: a 3xx from the inbox endpoint
   always means login or a checkpoint.
 - Back never walks the WebView history blindly. A refusal that cannot `goBack()` cleanly

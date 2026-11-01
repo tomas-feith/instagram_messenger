@@ -7,9 +7,10 @@ import androidx.core.content.edit
  * The only state this app keeps of its own: what the notifier has already said.
  *
  * SharedPreferences rather than Room. There is no user data here - the messages live on
- * Instagram's servers and the login lives in the WebView's cookie jar - only a watermark and
- * a few flags, all cheap to lose: a lost watermark costs one silent re-seed, and a lost
- * flag at worst one repeated dialog or notification.
+ * Instagram's servers and the login lives in the WebView's cookie jar - only a watermark,
+ * the inbox query and its tokens, and a few flags, all cheap to lose: a lost watermark
+ * costs one silent re-seed, lost tokens one extra page download, a lost query a fallback
+ * until the inbox is next opened, and a lost flag at worst one repeated notification.
  */
 class NotifierState(
     context: Context,
@@ -27,6 +28,49 @@ class NotifierState(
             prefs.edit {
                 if (value == null) remove(KEY_WATERMARK) else putLong(KEY_WATERMARK, value)
             }
+
+    /** The inbox query last captured from the site, or null if none has been yet. */
+    var inboxQuery: InboxQuery?
+        get() {
+            val docId = prefs.getString(KEY_QUERY_DOC_ID, null) ?: return null
+            val variables = prefs.getString(KEY_QUERY_VARIABLES, null) ?: return null
+            return InboxQuery(docId, variables)
+        }
+        set(value) =
+            prefs.edit {
+                if (value == null) {
+                    remove(KEY_QUERY_DOC_ID)
+                    remove(KEY_QUERY_VARIABLES)
+                } else {
+                    putString(KEY_QUERY_DOC_ID, value.docId)
+                    putString(KEY_QUERY_VARIABLES, value.variables)
+                }
+            }
+
+    /**
+     * The session's GraphQL tokens, captured from the site or read from the inbox page.
+     * As private as the cookie jar they belong to, and Auto Backup is off for the app.
+     */
+    var tokens: Tokens?
+        get() {
+            val dtsg = prefs.getString(KEY_FB_DTSG, null) ?: return null
+            return Tokens(dtsg, prefs.getString(KEY_LSD, null))
+        }
+        set(value) =
+            prefs.edit {
+                if (value == null) {
+                    remove(KEY_FB_DTSG)
+                    remove(KEY_LSD)
+                } else {
+                    putString(KEY_FB_DTSG, value.fbDtsg)
+                    if (value.lsd == null) remove(KEY_LSD) else putString(KEY_LSD, value.lsd)
+                }
+            }
+
+    /** Whether the "notifications stopped working" warning is up since checks broke. */
+    var brokenNotified: Boolean
+        get() = prefs.getBoolean(KEY_BROKEN, false)
+        set(value) = prefs.edit { putBoolean(KEY_BROKEN, value) }
 
     /** Whether the "log in again" notification has been posted since the session broke. */
     var loggedOutNotified: Boolean
@@ -66,6 +110,11 @@ class NotifierState(
         const val KEY_EXEMPTION_ASKED = "exemption_asked"
         const val KEY_WAS_EXEMPT = "was_exempt"
         const val KEY_RESTRICTED = "restricted_notified"
+        const val KEY_QUERY_DOC_ID = "inbox_query_doc_id"
+        const val KEY_QUERY_VARIABLES = "inbox_query_variables"
+        const val KEY_FB_DTSG = "fb_dtsg"
+        const val KEY_LSD = "lsd"
+        const val KEY_BROKEN = "broken_notified"
     }
 }
 

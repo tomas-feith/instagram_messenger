@@ -28,6 +28,7 @@ private const val MESSAGE_ID = 1
 private const val SUMMARY_ID = 2
 private const val LOGGED_OUT_ID = 3
 private const val RESTRICTED_ID = 4
+private const val BROKEN_ID = 5
 
 private const val GROUP_KEY = "com.instachat.app.MESSAGES"
 
@@ -170,6 +171,39 @@ fun notifyRestricted(context: Context) {
             .setContentIntent(openIntent(context, null))
             .build()
     NotificationManagerCompat.from(context).notify(RESTRICTED_ID, notification)
+}
+
+/**
+ * Say once that checks have stopped reading the inbox. Most often the query has gone stale
+ * after an Instagram update, and opening the inbox captures the current one - which is why
+ * the text asks for exactly that. Cleared by the next check that reads an inbox.
+ */
+fun notifyBroken(context: Context) {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+        ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+        PackageManager.PERMISSION_GRANTED
+    ) {
+        return
+    }
+    val notification =
+        NotificationCompat
+            .Builder(context, ACCOUNT_CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_notification)
+            .setContentTitle("Message notifications stopped working")
+            .setContentText("Open Insta Chat once to fix it.")
+            .setStyle(
+                NotificationCompat.BigTextStyle().bigText(
+                    "Open Insta Chat once to fix it. If this keeps coming back, Instagram " +
+                        "changed something the app relies on.",
+                ),
+            ).setAutoCancel(true)
+            .setContentIntent(openIntent(context, null))
+            .build()
+    NotificationManagerCompat.from(context).notify(BROKEN_ID, notification)
+}
+
+fun cancelBroken(context: Context) {
+    NotificationManagerCompat.from(context).cancel(BROKEN_ID)
 }
 
 /**

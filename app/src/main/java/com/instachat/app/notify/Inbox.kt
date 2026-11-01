@@ -9,21 +9,23 @@ import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 
 /*
- * Reading the response of Instagram's web inbox endpoint.
+ * Reading the response of the web inbox's GraphQL query (see InboxQuery.kt).
  *
- * The endpoint is the one instagram.com itself calls to draw the thread list; it is not a
+ * The query is the one instagram.com itself sends to draw the thread list; it is not a
  * published API and has no schema. Everything here therefore reads defensively: a field
  * that is missing or has changed type makes that one thread unreadable, never the whole
- * response, and IDs and timestamps are accepted as either JSON numbers or strings because
- * the site has sent both.
+ * response, and IDs and timestamps are accepted as either JSON numbers or strings.
+ *
+ * Timestamps arrive in milliseconds and are kept in microseconds, the unit of the REST
+ * endpoint this replaced, so a watermark stored before the switch still means the same.
  *
  * Pure, so it can be tested against captured responses without a device.
  */
 
 /** The last message in a thread, as far as a notification needs it. */
 data class LastMessage(
-    val senderId: String,
-    /** Microseconds since the epoch, which is the unit Instagram uses throughout. */
+    val fromViewer: Boolean,
+    /** Microseconds since the epoch. */
     val timestampMicros: Long,
     val preview: String,
 )
@@ -40,15 +42,19 @@ data class InboxThread(
 
 sealed interface InboxResult {
     data class Parsed(
-        val viewerId: String,
         val threads: List<InboxThread>,
     ) : InboxResult
 
     /** The session is gone: the user has to open the app and log in again. */
     data object LoggedOut : InboxResult
 
-    /** A response that is neither an inbox nor a login demand. Probably a format change. */
-    data object Unreadable : InboxResult
+    /**
+     * A response that is neither an inbox nor a login demand: a stale query, refused
+     * tokens, or a format change. [reason] is for the log only.
+     */
+    data class Unreadable(
+        val reason: String,
+    ) : InboxResult
 }
 
 /** One thread worth a notification. */
@@ -61,50 +67,50 @@ data class UnreadThread(
 
 private val json = Json { ignoreUnknownKeys = true }
 
-private val LOGIN_MESSAGES = setOf("login_required", "checkpoint_required", "challenge_required")
+private const val MICROS_PER_MILLI = 1000L
+private const val MAX_REASON_LENGTH = 120
 
 /**
- * Parse [body].
- *
- * [cookieViewerId] is the `ds_user_id` cookie. The response usually names the viewer
- * too, but the cookie is what the session is actually for, so it wins when both exist.
+ * Parse [body], the first line of a GraphQL response - the endpoint streams further lines
+ * after it, which a thread list does not need.
  */
-fun parseInbox(
-    body: String,
-    cookieViewerId: String?,
-): InboxResult {
+fun parseInbox(body: String): InboxResult {
     val root =
         try {
-            json.parseToJsonElement(body) as? JsonObject
+            // Error responses are sometimes prefixed to make them unexecutable as script.
+            json.parseToJsonElement(body.removePrefix("for (;;);").lineSequence().first())
+                as? JsonObject
         } catch (_: SerializationException) {
             null
-        } ?: return InboxResult.Unreadable
+        } ?: return InboxResult.Unreadable("not JSON")
 
-    // A checkpoint counts as logged out too: either way nothing more will be read until
-    // the user opens the app and deals with it, which is what the notification asks.
-    if (root.bool("require_login") == true || root.str("message") in LOGIN_MESSAGES) {
-        return InboxResult.LoggedOut
+    (root["errors"] as? JsonArray)?.firstOrNull()?.let { error ->
+        val message = (error as? JsonObject)?.str("message") ?: error.toString()
+        return InboxResult.Unreadable("GraphQL error: ${message.take(MAX_REASON_LENGTH)}")
     }
 
-    val threads = (root["inbox"] as? JsonObject)?.get("threads") as? JsonArray
-    val viewerId =
-        cookieViewerId?.takeIf { it.isNotBlank() }
-            ?: (root["viewer"] as? JsonObject)?.str("pk")
-    if (threads == null || viewerId == null) return InboxResult.Unreadable
+    val edges =
+        root
+            .obj("data")
+            ?.obj("get_slide_mailbox_for_iris_subscription")
+            ?.obj("threads_by_folder")
+            ?.get("edges") as? JsonArray
+            ?: return InboxResult.Unreadable("no thread list in the response")
 
     return InboxResult.Parsed(
-        viewerId = viewerId,
-        threads = threads.mapNotNull { (it as? JsonObject)?.let { t -> parseThread(t, viewerId) } },
+        edges.mapNotNull { edge ->
+            (edge as? JsonObject)?.obj("node")?.obj("as_ig_direct_thread")?.let(::parseThread)
+        },
     )
 }
 
-private fun parseThread(
-    thread: JsonObject,
-    viewerId: String,
-): InboxThread? {
-    // The web client addresses threads by the short v2 id in its URLs (/direct/t/<id>/);
-    // the long legacy thread_id is kept only as a fallback for responses without one.
-    val threadId = thread.str("thread_v2_id") ?: thread.str("thread_id") ?: return null
+private fun parseThread(thread: JsonObject): InboxThread? {
+    // thread_fbid is what the site's own /direct/t/<id>/ URLs hold; checked by tapping a
+    // thread on the device. `id` has carried the same value.
+    val threadId = thread.str("thread_fbid") ?: thread.str("id") ?: return null
+    // Messages and read receipts name people by their messaging fbid, not the Instagram
+    // user id, so this is the id the viewer has to be recognised by.
+    val viewer = thread.obj("viewer")?.str("interop_messaging_user_fbid") ?: return null
     val users = (thread["users"] as? JsonArray).orEmpty().filterIsInstance<JsonObject>()
     val isGroup = thread.bool("is_group") ?: (users.size > 1)
 
@@ -113,32 +119,44 @@ private fun parseThread(
             ?: users.firstOrNull()?.let(::displayName)
             ?: "Instagram"
 
-    val lastItem = (thread["items"] as? JsonArray)?.firstOrNull() as? JsonObject
+    // Newest first, as the site draws them.
+    val lastNode =
+        (thread.obj("slide_messages")?.get("edges") as? JsonArray)
+            ?.firstOrNull()
+            ?.let { (it as? JsonObject)?.obj("node") }
     val last =
-        lastItem?.let { item ->
-            val sender = item.str("user_id") ?: return@let null
-            val timestamp = item.str("timestamp")?.toLongOrNull() ?: return@let null
-            val body = previewOf(item)
+        lastNode?.let { node ->
+            val sender = node.str("sender_fbid") ?: return@let null
+            val timestamp = node.str("timestamp_ms")?.toLongOrNull() ?: return@let null
+            val fromViewer = sender == viewer
+            val body = previewOf(node)
             val text =
-                if (isGroup && sender != viewerId) {
-                    val name = users.firstOrNull { it.str("pk") == sender }?.let(::displayName)
+                if (isGroup && !fromViewer && node.str("content_type") == "TEXT") {
+                    val name =
+                        users
+                            .firstOrNull { it.str("interop_messaging_user_fbid") == sender }
+                            ?.let(::displayName)
                     if (name != null) "$name: $body" else body
                 } else {
                     body
                 }
-            LastMessage(sender, timestamp, text)
+            LastMessage(fromViewer, timestamp * MICROS_PER_MILLI, text)
         }
 
     val seen =
-        ((thread["last_seen_at"] as? JsonObject)?.get(viewerId) as? JsonObject)
-            ?.str("timestamp")
+        (thread["slide_read_receipts"] as? JsonArray)
+            .orEmpty()
+            .filterIsInstance<JsonObject>()
+            .firstOrNull { it.str("participant_fbid") == viewer }
+            ?.str("watermark_timestamp_ms")
             ?.toLongOrNull()
+            ?.times(MICROS_PER_MILLI)
 
     return InboxThread(
         threadId = threadId,
         title = title,
         isGroup = isGroup,
-        muted = thread.bool("muted") == true,
+        muted = thread.bool("is_muted") == true,
         last = last,
         viewerSeenMicros = seen,
     )
@@ -150,54 +168,17 @@ private fun displayName(user: JsonObject): String? =
 /**
  * What the notification says the message was.
  *
- * Only text is quoted. Everything else is described, because the notification cannot show
- * a reel - and quoting the caption of someone else's post as if a friend had written it
- * would be misleading.
+ * Text is quoted. Everything else uses the site's own one-line snippet, which for shares,
+ * reels and voice messages is a description ("sent an attachment.") and for a story reply
+ * is the reply - never the caption of someone else's post.
  */
-internal fun previewOf(item: JsonObject): String {
-    val type = item.str("item_type")
-    return when (type) {
-        "text" -> {
-            item.str("text")?.takeIf { it.isNotBlank() } ?: "Sent a message"
-        }
-
-        "link" -> {
-            (item["link"] as? JsonObject)?.str("text")?.takeIf { it.isNotBlank() }
-                ?: "Sent a link"
-        }
-
-        "media", "raven_media", "visual_media" -> {
-            "Sent a photo or video"
-        }
-
-        "voice_media" -> {
-            "Sent a voice message"
-        }
-
-        "clip", "xma_clip" -> {
-            "Sent a reel"
-        }
-
-        "media_share", "xma_media_share" -> {
-            "Sent a post"
-        }
-
-        "story_share", "reel_share", "xma_story_share", "xma_reel_share" -> {
-            "Replied to a story"
-        }
-
-        "animated_media" -> {
-            "Sent a GIF"
-        }
-
-        "like" -> {
-            "Sent a like"
-        }
-
-        else -> {
-            "Sent a message"
-        }
-    }
+internal fun previewOf(node: JsonObject): String {
+    val text = node.str("text_body")?.takeIf { it.isNotBlank() }
+    val snippet = node.str("igd_snippet")?.takeIf { it.isNotBlank() }
+    return when {
+        node.str("content_type") == "TEXT" -> text ?: snippet
+        else -> snippet ?: text
+    } ?: "Sent a message"
 }
 
 /**
@@ -218,8 +199,7 @@ fun unreadSince(
         .mapNotNull { thread ->
             val last = thread.last ?: return@mapNotNull null
             val seen = thread.viewerSeenMicros
-            val unread =
-                last.senderId != inbox.viewerId && (seen == null || last.timestampMicros > seen)
+            val unread = !last.fromViewer && (seen == null || last.timestampMicros > seen)
             if (unread && last.timestampMicros > watermarkMicros) {
                 UnreadThread(thread.threadId, thread.title, last.preview, last.timestampMicros)
             } else {
@@ -240,6 +220,8 @@ fun nextWatermark(
     inbox: InboxResult.Parsed,
     previous: Long,
 ): Long = maxOf(previous, inbox.threads.maxOfOrNull { it.last?.timestampMicros ?: 0L } ?: 0L)
+
+private fun JsonObject.obj(key: String): JsonObject? = this[key] as? JsonObject
 
 private fun JsonObject.str(key: String): String? = (this[key] as? JsonPrimitive)?.contentOrNull
 

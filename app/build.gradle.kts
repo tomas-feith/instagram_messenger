@@ -133,8 +133,13 @@ dependencies {
     // The periodic inbox check behind the new-message notification.
     implementation(libs.androidx.work.runtime.ktx)
 
-    // Plain OkHttp: the worker makes one GET against the web inbox endpoint, which is not
-    // a REST API a declarative client would fit.
+    // Origin-restricted page-to-app messaging and document-start scripts, for learning the
+    // inbox query from the site's own requests (assets/capture_inbox_query.js). The plain
+    // addJavascriptInterface would expose the bridge to every frame, embeds included.
+    implementation(libs.androidx.webkit)
+
+    // Plain OkHttp: the worker makes the same GraphQL call the web inbox does, which is
+    // not a REST API a declarative client would fit.
     implementation(libs.okhttp)
 
     // Only the JsonElement tree API, to read the inbox response. No serialization plugin:
