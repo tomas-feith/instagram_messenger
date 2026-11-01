@@ -1,6 +1,6 @@
 [versions]
 agp = "9.4.1"
-kotlin = "2.4.20"
+kotlin = "2.4.21"
 ktlint = "14.2.0"
 ktlintTool = "1.8.0"
 # detekt 2 is still in alpha; it is taken deliberately for the K2 frontend, which is what
@@ -15,7 +15,7 @@ composeBom = "2026.09.00"
 coroutines = "1.11.0"
 work = "2.12.0"
 okhttp = "5.5.0"
-kotlinxSerialization = "1.11.0"
+kotlinxSerialization = "1.12.0"
 junit = "4.13.2"
 
 [libraries]
